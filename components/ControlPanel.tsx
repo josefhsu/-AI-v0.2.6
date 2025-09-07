@@ -37,7 +37,7 @@ type ControlPanelProps = {
     drawTool: DrawTool;
     setDrawTool: (tool: DrawTool) => void;
     brushSize: number;
-    setBrushSize: (size: number) => void;
+    onBrushSizeChange: (size: number) => void;
     fillColor: string;
     setFillColor: (color: string) => void;
     strokeColor: string;
@@ -260,8 +260,20 @@ const ImageUploader: React.FC<{
 const VersionInfo: React.FC = () => (
     <div className="flex flex-col h-full text-slate-500 p-4 overflow-y-auto">
         <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 mb-4 text-fuchsia-500">
-                 <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="grad-logo-info" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#d946ef"/><stop offset="100%" stopColor="#22d3ee"/></linearGradient></defs><path d="M158.28,68.889c-3.1-13.2-11-24.6-21.8-32.3c-10.8-7.8-23.8-11.7-37.4-11.6c-13.5,0-26.4,3.9-37.1,11.6 c-10.7,7.7-18.6,19.1-21.7,32.3c-3.1,13.2-0.8,27,6.8,38.6c7.5,11.6,18.9,20.2,32,24.1l-1.3,16.3h-8.7c-2.3,0-4.1,1.8-4.1,4.1 s1.8,4.1,4.1,4.1h39.2c2.3,0,4.1-1.8,4.1-4.1s-1.8-4.1-4.1-4.1h-8.7l-1.3-16.3c13.1-3.9,24.5-12.5,32-24.1 C159.08,95.889,161.38,82.089,158.28,68.889z M130.88,99.489c-6.1,9.4-15.4,15.8-26,18.5l-2.6-32.5c0.5-0.1,1-0.2,1.5-0.4 c2.8-0.8,5.4-2.2,7.7-4.1c2.3-1.9,4.2-4.2,5.6-6.9c1.4-2.7,2.2-5.6,2.2-8.6c0-6.5-3.3-12.3-8.5-15.6c-5.2-3.3-11.6-4-17.1-1.9 c-5.5,2.1-9.5,6.6-11.2,12.2c-1.7,5.6-0.8,11.7,2.4,16.5c3.2,4.8,8.2,7.9,13.8,8.6l-2,25.2c-10.9-2.6-20.4-9.1-26.6-18.7 c-6.2-9.6-8.7-21.3-6.4-32.5c2.3-11.2,8.8-20.5,17.7-26.7c8.9-6.2,19.8-9.4,31.2-9.4s22.3,3.2,31.2,9.4 c8.9,6.2,15.4,15.5,17.7,26.7C139.58,78.189,137.08,89.889,130.88,99.489z" fill="url(#grad-logo-info)"/></svg>
+            <div className="w-24 h-24 mb-4">
+                <svg viewBox="0 0 280 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="grad-logo-info" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#d946ef" />
+                            <stop offset="100%" stopColor="#22d3ee" />
+                        </linearGradient>
+                    </defs>
+                    <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="url(#grad-logo-info)" fontFamily="Times New Roman, serif" fontStyle="italic" fontWeight="bold">
+                        B<tspan baselineShift="super" fontSize="50">2</tspan>
+                        N<tspan baselineShift="super" fontSize="50">3</tspan>
+                        A<tspan baselineShift="super" fontSize="50">2</tspan>
+                    </text>
+                </svg>
             </div>
             <h3 className="text-2xl font-semibold text-cyan-400">鳥巢AI包娜娜 v0.2.6</h3>
             <p className="text-xl mt-2 mb-4">主要功能介紹：</p>
@@ -551,7 +563,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         <div>
                             <label className="text-xs text-slate-400 block mb-1">{brushSizeLabel}</label>
                             <div className="flex items-center gap-2" title={!props.isMobile ? "使用 [ 和 ] 鍵調整" : undefined}>
-                                 <input type="range" min="1" max="100" value={props.brushSize} onChange={(e) => props.setBrushSize(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                                 <input type="range" min="1" max="100" value={props.brushSize} onChange={(e) => props.onBrushSizeChange(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
                                  <span className="text-sm font-semibold w-8 text-center">{props.brushSize}</span>
                             </div>
                         </div>

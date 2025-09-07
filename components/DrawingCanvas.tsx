@@ -1,11 +1,8 @@
-
-import React, { forwardRef, useImperativeHandle, useRef, useEffect, useState, useCallback } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useEffect, useCallback, useState } from 'react';
 import type { DrawTool, AspectRatio, DrawingCanvasRef } from '../types';
 
-interface Point {
-  x: number;
-  y: number;
-}
+// Let TypeScript know that fabric is available on the global scope
+declare const fabric: any;
 
 interface DrawingCanvasProps {
   tool: DrawTool;
@@ -15,6 +12,7 @@ interface DrawingCanvasProps {
   aspectRatio: AspectRatio;
   backgroundColor: string;
   backgroundImage: string | null;
+  isPreviewingBrushSize: boolean;
 }
 
 const MAX_UNDO_STEPS = 20;
@@ -29,33 +27,34 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       aspectRatio,
       backgroundColor,
       backgroundImage,
+      isPreviewingBrushSize,
     },
     ref
   ) => {
-    const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const tempCanvasRef = useRef<HTMLCanvasElement>(null);
-
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [startPoint, setStartPoint] = useState<Point | null>(null);
-    const [history, setHistory] = useState<string[]>([]);
-
-    const getCanvasContext = (canvas: HTMLCanvasElement | null) => canvas?.getContext('2d');
+    const fabricCanvasRef = useRef<any>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const historyRef = useRef<string[]>([]);
+    const isDrawingRef = useRef(false);
+    const startPointRef = useRef<{x: number, y: number} | null>(null);
+    const currentShapeRef = useRef<any>(null);
+    const previewCursorRef = useRef<HTMLDivElement>(null);
 
     const saveState = useCallback(() => {
-        const canvas = canvasRef.current;
+        const canvas = fabricCanvasRef.current;
         if (canvas) {
-            const dataUrl = canvas.toDataURL();
-            setHistory(prev => [...prev.slice(-MAX_UNDO_STEPS + 1), dataUrl]);
+            const json = canvas.toJSON();
+            historyRef.current.push(json);
+            if (historyRef.current.length > MAX_UNDO_STEPS) {
+                historyRef.current.shift();
+            }
         }
     }, []);
-    
-    // --- Canvas Setup and Resizing ---
-    const setupCanvas = useCallback(() => {
+
+    const resizeAndScaleCanvas = useCallback(() => {
+        const canvas = fabricCanvasRef.current;
         const container = containerRef.current;
-        const canvas = canvasRef.current;
-        const tempCanvas = tempCanvasRef.current;
-        if (!container || !canvas || !tempCanvas) return;
+        if (!canvas || !container) return;
 
         const [aspectW, aspectH] = aspectRatio.split(':').map(Number);
         const containerW = container.clientWidth;
@@ -68,249 +67,296 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             newH = containerH;
             newW = containerH * (aspectW / aspectH);
         }
-
-        canvas.width = tempCanvas.width = newW;
-        canvas.height = tempCanvas.height = newH;
         
-        const ctx = getCanvasContext(canvas);
-        if(ctx) {
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-        }
-        
-        // Redraw content after resize
-        if (history.length > 0) {
-            const lastState = new Image();
-            lastState.onload = () => ctx?.drawImage(lastState, 0, 0, newW, newH);
-            lastState.src = history[history.length - 1];
-        } else {
-             const img = new Image();
-             img.onload = () => {
-                 if(ctx) {
-                    ctx.fillStyle = backgroundColor;
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    saveState();
-                 }
-             };
-             if (backgroundImage) {
-                 img.src = backgroundImage;
-             } else {
-                 if(ctx) {
-                    ctx.fillStyle = backgroundColor;
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    saveState();
-                 }
-             }
-        }
+        canvas.setWidth(newW);
+        canvas.setHeight(newH);
+        canvas.calcOffset();
+        canvas.renderAll();
 
-    }, [aspectRatio, backgroundColor, backgroundImage, history, saveState]);
+    }, [aspectRatio]);
 
     useEffect(() => {
-        setupCanvas();
-        const observer = new ResizeObserver(setupCanvas);
-        if (containerRef.current) {
-            observer.observe(containerRef.current);
-        }
-        return () => observer.disconnect();
-    }, [setupCanvas]);
+        if (!canvasRef.current) return;
+        const canvas = new fabric.Canvas(canvasRef.current, {
+            selection: false,
+        });
+        fabricCanvasRef.current = canvas;
+        historyRef.current = [];
+        
+        resizeAndScaleCanvas();
+        saveState();
+
+        return () => {
+            canvas.dispose();
+            fabricCanvasRef.current = null;
+        };
+    }, []);
     
     useEffect(() => {
-        const canvas = canvasRef.current;
-        const ctx = getCanvasContext(canvas);
-        if (!ctx || !canvas) return;
-        
-        const img = new Image();
-        img.onload = () => {
-            ctx.fillStyle = backgroundColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            saveState();
-        };
+        window.addEventListener('resize', resizeAndScaleCanvas);
+        return () => window.removeEventListener('resize', resizeAndScaleCanvas);
+    }, [resizeAndScaleCanvas]);
+
+    // Update canvas properties
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        canvas.backgroundColor = backgroundColor;
 
         if (backgroundImage) {
-            img.src = backgroundImage;
+            fabric.Image.fromURL(backgroundImage, (img:any) => {
+                canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                    scaleX: canvas.width / img.width,
+                    scaleY: canvas.height / img.height,
+                });
+            });
         } else {
-            ctx.fillStyle = backgroundColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            saveState();
+            canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
         }
-
-    }, [backgroundColor, backgroundImage, saveState]);
-
-
-    const getMousePos = (e: React.MouseEvent | React.TouchEvent): Point => {
-        const canvas = tempCanvasRef.current;
-        if (!canvas) return { x: 0, y: 0 };
-        const rect = canvas.getBoundingClientRect();
-        const touch = 'touches' in e ? e.touches[0] : null;
-        const clientX = touch ? touch.clientX : (e as React.MouseEvent).clientX;
-        const clientY = touch ? touch.clientY : (e as React.MouseEvent).clientY;
-        return {
-            x: clientX - rect.left,
-            y: clientY - rect.top
-        };
-    };
-
-    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-        e.preventDefault();
-        setIsDrawing(true);
-        const pos = getMousePos(e);
-        setStartPoint(pos);
+        canvas.renderAll();
+    }, [backgroundColor, backgroundImage]);
+    
+    // Tool and brush settings
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
         
+        canvas.isDrawingMode = tool === 'brush';
+
         if (tool === 'brush') {
-            const ctx = getCanvasContext(canvasRef.current);
-            if (ctx) {
-                ctx.beginPath();
-                ctx.moveTo(pos.x, pos.y);
+            canvas.freeDrawingBrush.width = brushSize;
+            canvas.freeDrawingBrush.color = strokeColor;
+        }
+
+    }, [tool, brushSize, strokeColor]);
+    
+    // Brush Preview (HTML Overlay)
+    useEffect(() => {
+        const container = containerRef.current;
+        const previewEl = previewCursorRef.current;
+
+        if (!container || !previewEl || tool !== 'brush') {
+            if (previewEl) previewEl.style.display = 'none';
+            return;
+        }
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const canvasEl = fabricCanvasRef.current?.getElement();
+            if (!canvasEl) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const canvasRect = canvasEl.getBoundingClientRect();
+            
+            const x = e.clientX;
+            const y = e.clientY;
+
+            // Check if cursor is within the canvas element's bounds
+            if (x >= canvasRect.left && x <= canvasRect.right && y >= canvasRect.top && y <= canvasRect.bottom) {
+                previewEl.style.display = 'block';
+                previewEl.style.left = `${x - containerRect.left}px`;
+                previewEl.style.top = `${y - containerRect.top}px`;
+                previewEl.style.width = `${brushSize}px`;
+                previewEl.style.height = `${brushSize}px`;
+                previewEl.style.backgroundColor = strokeColor;
+                previewEl.style.transform = 'translate(-50%, -50%)';
+            } else {
+                previewEl.style.display = 'none';
             }
-        }
-    };
+        };
+
+        const handleMouseLeave = () => {
+            previewEl.style.display = 'none';
+        };
+        
+        previewEl.style.borderRadius = '50%';
+        previewEl.style.pointerEvents = 'none';
+        previewEl.style.position = 'absolute';
+        previewEl.style.opacity = '0.3';
+        previewEl.style.border = '1px solid rgba(255, 255, 255, 0.5)';
+
+        container.addEventListener('mousemove', handleMouseMove);
+        container.addEventListener('mouseleave', handleMouseLeave);
+
+        return () => {
+            container.removeEventListener('mousemove', handleMouseMove);
+            container.removeEventListener('mouseleave', handleMouseLeave);
+        };
+    }, [tool, brushSize, strokeColor]);
+
+
+    // Shape drawing logic
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas || tool === 'brush') return;
+
+        const handleMouseDown = (opt: any) => {
+            isDrawingRef.current = true;
+            const pointer = canvas.getPointer(opt.e);
+            startPointRef.current = { x: pointer.x, y: pointer.y };
+
+            let shape;
+            const commonProps = {
+                left: startPointRef.current.x,
+                top: startPointRef.current.y,
+                originX: 'left',
+                originY: 'top',
+                stroke: strokeColor,
+                strokeWidth: brushSize,
+                fill: fillColor,
+                selectable: false,
+                evented: false,
+            };
+
+            switch(tool) {
+                case 'rectangle':
+                    shape = new fabric.Rect({ ...commonProps, width: 0, height: 0 });
+                    break;
+                case 'circle':
+                    shape = new fabric.Ellipse({ ...commonProps, rx: 0, ry: 0 });
+                    break;
+                case 'arrow':
+                    // Arrow is a group of a line and a triangle
+                    const line = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+                        stroke: strokeColor,
+                        strokeWidth: brushSize,
+                    });
+                    const head = new fabric.Triangle({
+                        left: pointer.x,
+                        top: pointer.y,
+                        originX: 'center',
+                        originY: 'center',
+                        selectable: false,
+                        evented: false,
+                        angle: -90,
+                        width: brushSize * 3,
+                        height: brushSize * 3,
+                        fill: strokeColor,
+                    });
+                    shape = new fabric.Group([line, head], {
+                        selectable: false,
+                        evented: false,
+                    });
+                    break;
+            }
+            if (shape) {
+                currentShapeRef.current = shape;
+                canvas.add(shape);
+            }
+        };
+
+        const handleMouseMove = (opt: any) => {
+            if (!isDrawingRef.current || !currentShapeRef.current || !startPointRef.current) return;
+            const pointer = canvas.getPointer(opt.e);
+            const shape = currentShapeRef.current;
+            const start = startPointRef.current;
+            
+            if (tool === 'rectangle') {
+                shape.set({
+                    width: Math.abs(pointer.x - start.x),
+                    height: Math.abs(pointer.y - start.y),
+                    originX: pointer.x < start.x ? 'right' : 'left',
+                    originY: pointer.y < start.y ? 'bottom' : 'top',
+                });
+            } else if (tool === 'circle') {
+                shape.set({
+                    rx: Math.abs(pointer.x - start.x) / 2,
+                    ry: Math.abs(pointer.y - start.y) / 2,
+                    originX: 'center',
+                    originY: 'center',
+                    left: start.x + (pointer.x - start.x) / 2,
+                    top: start.y + (pointer.y - start.y) / 2,
+                });
+            } else if (tool === 'arrow') {
+                 const line = shape.item(0);
+                 const head = shape.item(1);
+                 line.set({ x2: pointer.x, y2: pointer.y });
+                 
+                 const angle = Math.atan2(pointer.y - start.y, pointer.x - start.x) * 180 / Math.PI;
+                 head.set({ left: pointer.x, top: pointer.y, angle: angle + 90 });
+            }
+            canvas.renderAll();
+        };
+
+        const handleMouseUp = () => {
+            isDrawingRef.current = false;
+            if (currentShapeRef.current) {
+                currentShapeRef.current.setCoords();
+            }
+            currentShapeRef.current = null;
+            startPointRef.current = null;
+            saveState();
+        };
+
+        canvas.on('mouse:down', handleMouseDown);
+        canvas.on('mouse:move', handleMouseMove);
+        canvas.on('mouse:up', handleMouseUp);
+        // Also listen to path:created for free drawing
+        canvas.on('path:created', saveState);
+
+        return () => {
+            canvas.off('mouse:down', handleMouseDown);
+            canvas.off('mouse:move', handleMouseMove);
+            canvas.off('mouse:up', handleMouseUp);
+            canvas.off('path:created', saveState);
+        };
+    }, [tool, strokeColor, fillColor, brushSize, saveState]);
     
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing) return;
-        e.preventDefault();
-        const pos = getMousePos(e);
-        const mainCtx = getCanvasContext(canvasRef.current);
-        const tempCtx = getCanvasContext(tempCanvasRef.current);
-
-        if (!mainCtx || !tempCtx || !tempCanvasRef.current) return;
-        
-        tempCtx.lineWidth = brushSize;
-        tempCtx.strokeStyle = strokeColor;
-        tempCtx.fillStyle = fillColor;
-
-        tempCtx.clearRect(0, 0, tempCtx.canvas.width, tempCtx.canvas.height);
-
-        switch(tool) {
-            case 'brush':
-                mainCtx.lineWidth = brushSize;
-                mainCtx.strokeStyle = strokeColor;
-                mainCtx.lineTo(pos.x, pos.y);
-                mainCtx.stroke();
-                break;
-            case 'rectangle':
-                if (startPoint) {
-                    tempCtx.beginPath();
-                    tempCtx.rect(startPoint.x, startPoint.y, pos.x - startPoint.x, pos.y - startPoint.y);
-                    if (fillColor !== 'transparent') tempCtx.fill();
-                    if (strokeColor !== 'transparent' && brushSize > 0) tempCtx.stroke();
-                }
-                break;
-            case 'circle':
-                 if (startPoint) {
-                    const radiusX = Math.abs(pos.x - startPoint.x) / 2;
-                    const radiusY = Math.abs(pos.y - startPoint.y) / 2;
-                    const centerX = startPoint.x + (pos.x - startPoint.x) / 2;
-                    const centerY = startPoint.y + (pos.y - startPoint.y) / 2;
-                    tempCtx.beginPath();
-                    tempCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-                    if (fillColor !== 'transparent') tempCtx.fill();
-                    if (strokeColor !== 'transparent' && brushSize > 0) tempCtx.stroke();
-                }
-                break;
-            case 'arrow':
-                if (startPoint) {
-                    const headlen = brushSize * 2;
-                    const dx = pos.x - startPoint.x;
-                    const dy = pos.y - startPoint.y;
-                    const angle = Math.atan2(dy, dx);
-                    tempCtx.beginPath();
-                    tempCtx.moveTo(startPoint.x, startPoint.y);
-                    tempCtx.lineTo(pos.x, pos.y);
-                    tempCtx.lineTo(pos.x - headlen * Math.cos(angle - Math.PI / 6), pos.y - headlen * Math.sin(angle - Math.PI / 6));
-                    tempCtx.moveTo(pos.x, pos.y);
-                    tempCtx.lineTo(pos.x - headlen * Math.cos(angle + Math.PI / 6), pos.y - headlen * Math.sin(angle + Math.PI / 6));
-                    tempCtx.stroke();
-                }
-                break;
-        }
-    };
-    
-    const stopDrawing = () => {
-        if (!isDrawing) return;
-        const mainCtx = getCanvasContext(canvasRef.current);
-        const tempCtx = getCanvasContext(tempCanvasRef.current);
-        const tempCanvas = tempCanvasRef.current;
-        if (mainCtx && tempCanvas) {
-            mainCtx.drawImage(tempCanvas, 0, 0);
-            tempCtx?.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-        }
-        
-        setIsDrawing(false);
-        setStartPoint(null);
-        if (tool === 'brush') mainCtx?.closePath();
-        
-        saveState();
-    };
 
     useImperativeHandle(ref, () => ({
         exportImage: () => {
-            return canvasRef.current?.toDataURL('image/png') || '';
+            return fabricCanvasRef.current?.toDataURL({ format: 'png' }) || '';
         },
         clear: () => {
-            const canvas = canvasRef.current;
-            const ctx = getCanvasContext(canvas);
-            if (canvas && ctx) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                 const img = new Image();
-                 img.onload = () => {
-                     ctx.fillStyle = backgroundColor;
-                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                     if (backgroundImage) {
-                         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                     }
-                     saveState();
-                 };
-                 if (backgroundImage) {
-                    img.src = backgroundImage;
-                 } else {
-                    ctx.fillStyle = backgroundColor;
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const canvas = fabricCanvasRef.current;
+            if (canvas) {
+                canvas.clear();
+                canvas.backgroundColor = backgroundColor;
+                if (backgroundImage) {
+                    fabric.Image.fromURL(backgroundImage, (img:any) => {
+                        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                            scaleX: canvas.width / img.width,
+                            scaleY: canvas.height / img.height,
+                        });
+                        saveState();
+                    });
+                } else {
+                    canvas.renderAll();
                     saveState();
-                 }
+                }
             }
         },
         undo: () => {
-            if (history.length <= 1) return; // Keep initial state
-            const prevHistory = history.slice(0, -1);
-            const lastStateUrl = prevHistory[prevHistory.length - 1];
-            
-            const canvas = canvasRef.current;
-            const ctx = getCanvasContext(canvas);
-            if (canvas && ctx && lastStateUrl) {
-                const img = new Image();
-                img.onload = () => {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
-                };
-                img.src = lastStateUrl;
-                setHistory(prevHistory);
+            const canvas = fabricCanvasRef.current;
+            if (canvas && historyRef.current.length > 1) {
+                historyRef.current.pop(); // remove current state
+                const lastState = historyRef.current[historyRef.current.length - 1];
+                canvas.loadFromJSON(lastState, () => {
+                    canvas.renderAll();
+                });
             }
         }
     }));
 
     return (
-      <div className="relative w-full h-full bg-black/20 flex items-center justify-center p-2" ref={containerRef}>
-        <canvas 
-            ref={canvasRef} 
-            className="absolute"
-        />
-        <canvas
-          ref={tempCanvasRef}
-          className="absolute cursor-crosshair"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-        />
+      <div className="w-full h-full flex items-center justify-center relative overflow-hidden" ref={containerRef}>
+        <canvas ref={canvasRef} />
+        <div ref={previewCursorRef} style={{ display: 'none' }} />
+        {isPreviewingBrushSize && (
+            <div 
+                className="absolute rounded-full pointer-events-none transition-all duration-75"
+                style={{
+                    width: `${brushSize}px`,
+                    height: `${brushSize}px`,
+                    backgroundColor: strokeColor,
+                    border: tool !== 'brush' && brushSize > 0 ? `1px solid rgba(255, 255, 255, 0.5)` : 'none',
+                    opacity: 0.5,
+                }}
+            />
+        )}
       </div>
     );
   }
 );
 
 DrawingCanvas.displayName = 'DrawingCanvas';
-

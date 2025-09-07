@@ -15,19 +15,18 @@ interface ResultPanelProps {
 }
 
 const CyberpunkLogo: React.FC = () => (
-    <svg width="200" height="200" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-6">
+    <svg viewBox="0 0 280 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto mb-6 w-48 h-24">
         <defs>
             <linearGradient id="grad-cyber" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#d946ef" />
                 <stop offset="100%" stopColor="#22d3ee" />
             </linearGradient>
         </defs>
-        <path d="M40 8 L200 8 Q232 8 232 40 L232 200 Q232 232 200 232 L40 232 Q8 232 8 200 L8 40 Q8 8 40 8" stroke="url(#grad-cyber)" strokeWidth="4" fill="none" />
-        <path d="M16 16 L224 16 L224 224 L16 224 L16 16" stroke="#d946ef" strokeOpacity="0.2" strokeWidth="16" fill="none" />
-        <text x="50%" y="45%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="url(#grad-cyber)" fontFamily="monospace" fontWeight="bold">B</text>
-        <text x="50%" y="75%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="url(#grad-cyber)" fontFamily="monospace" fontWeight="bold">N</text>
-        <path d="M40 8 L200 8" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.5" />
-        <path d="M8 40 L8 200" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.5" />
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="url(#grad-cyber)" fontFamily="Times New Roman, serif" fontStyle="italic" fontWeight="bold">
+            B<tspan baselineShift="super" fontSize="50">2</tspan>
+            N<tspan baselineShift="super" fontSize="50">3</tspan>
+            A<tspan baselineShift="super" fontSize="50">2</tspan>
+        </text>
     </svg>
 );
 

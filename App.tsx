@@ -44,8 +44,11 @@ const App: React.FC = () => {
     const [strokeColor, setStrokeColor] = useState('#FFFFFF');
     const [fillColor, setFillColor] = useState('transparent');
     const [drawAspectRatio, setDrawAspectRatio] = useState<AspectRatio>('1:1');
-    const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#121212');
+    const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#808080');
     const [drawBackgroundImage, setDrawBackgroundImage] = useState<string | null>(null);
+    const [isPreviewingBrushSize, setIsPreviewingBrushSize] = useState(false);
+    const brushPreviewTimerRef = useRef<number | null>(null);
+
 
     // UI State
     const [lightboxConfig, setLightboxConfig] = useState<LightboxConfig | null>(null);
@@ -138,9 +141,12 @@ const App: React.FC = () => {
     };
 
 
-    const handleGenerate = useCallback(async () => {
+    const handleGenerate = useCallback(async (overrideOptions?: { prompt?: string, referenceImages?: UploadedImage[] }) => {
         setError(null);
-        if (!prompt.trim() && referenceImages.length === 0 && appMode !== 'DRAW') {
+        const currentPrompt = overrideOptions?.prompt ?? prompt;
+        const currentRefImages = overrideOptions?.referenceImages ?? referenceImages;
+
+        if (!currentPrompt.trim() && currentRefImages.length === 0 && appMode !== 'DRAW') {
             setError("請輸入提示詞或上傳參考圖。");
             return;
         }
@@ -163,16 +169,16 @@ const App: React.FC = () => {
             }
 
             // Handle uploaded reference images
-            for (const img of referenceImages) {
+            for (const img of currentRefImages) {
                 const part = await gemini.fileToGenerativePart(img.file);
                 combinedReferenceParts.push(part);
             }
             
-            const imageDatas = await gemini.generateImagesWithGemini(prompt, numImages, selectedAspectRatio, combinedReferenceParts);
+            const imageDatas = await gemini.generateImagesWithGemini(currentPrompt, numImages, selectedAspectRatio, combinedReferenceParts);
 
             const newImagesPromises = imageDatas.map((base64) => {
                 const src = `data:image/png;base64,${base64}`;
-                return processImageSrc(src, prompt);
+                return processImageSrc(src, currentPrompt);
             });
             const newImages: GeneratedImage[] = await Promise.all(newImagesPromises);
 
@@ -310,10 +316,20 @@ const App: React.FC = () => {
         }
     }, [isMobile, addToast]);
 
-    const handleZoomOut = useCallback(async (src: string) => {
-        addToast("Zoom Out 功能即將推出！", 'info');
-        console.log("Zoom Out requested for:", src);
-    }, [addToast]);
+    const onZoomOut = useCallback(async (src: string) => {
+        const file = dataURLtoFile(src, 'zoom-out-source.png');
+        const refImage: UploadedImage = { src, file };
+        const zoomPrompt = "zoom out 2x, outpainting";
+        
+        // Switch to generate mode, set up prompt and ref image, then generate
+        setAppMode('GENERATE');
+        setPrompt(zoomPrompt);
+        setReferenceImages([refImage]);
+        
+        // Needs a slight delay for state to update before calling generate
+        setTimeout(() => handleGenerate({ prompt: zoomPrompt, referenceImages: [refImage] }), 100);
+
+    }, [handleGenerate]);
     
     // History Panel Handlers
     const handleUseHistoryItem = (item: HistoryItem) => {
@@ -373,17 +389,80 @@ const App: React.FC = () => {
         addToast(`已建立 ${ratio} 灰色參考圖`, 'success');
     
     }, [addToast]);
+    
+    const handleUseDrawing = useCallback(() => {
+        const drawingDataUrl = drawingCanvasRef.current?.exportImage();
+        if (drawingDataUrl) {
+            const drawingFile = dataURLtoFile(drawingDataUrl, 'drawing.png');
+            const newRef: UploadedImage = { src: drawingDataUrl, file: drawingFile };
+            setReferenceImages(prev => [newRef, ...prev].slice(0,8));
+            setAppMode('GENERATE');
+            addToast('畫布已加入參考圖', 'success');
+        }
+    },[]);
+
+    const handleBrushSizeChange = useCallback((size: number) => {
+        setBrushSize(size);
+        setIsPreviewingBrushSize(true);
+        if (brushPreviewTimerRef.current) {
+            clearTimeout(brushPreviewTimerRef.current);
+        }
+        brushPreviewTimerRef.current = window.setTimeout(() => {
+            setIsPreviewingBrushSize(false);
+        }, 2000);
+    }, []);
 
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable;
             const isMod = e.ctrlKey || e.metaKey;
-            
+
+            // --- Hotkeys that work even when typing ---
             if (isMod && e.key.toLowerCase() === 'enter') {
                 e.preventDefault();
-                if (appMode === 'GENERATE' || appMode === 'CHARACTER_CREATOR' || appMode === 'DRAW') handleGenerate();
+                if (appMode === 'GENERATE' || appMode === 'CHARACTER_CREATOR') handleGenerate();
                 if (appMode === 'REMOVE_BG') handleRemoveBackground();
+                if (appMode === 'DRAW') handleUseDrawing();
+                return; 
             }
+
+            // --- Block other hotkeys when typing ---
+            if (isTyping) {
+                return;
+            }
+
+            // --- Global hotkeys (when NOT typing) ---
+
+            // Brush size adjustment
+            if (appMode === 'DRAW') {
+                if (e.key === '[') {
+                    e.preventDefault();
+                    setBrushSize(prev => Math.max(1, prev - 1));
+                    return;
+                }
+                if (e.key === ']') {
+                    e.preventDefault();
+                    setBrushSize(prev => Math.min(100, prev + 1));
+                    return;
+                }
+            }
+            
+            // Mode switching
+            if (isMod && e.altKey) {
+                e.preventDefault();
+                switch(e.key) {
+                    case '1': setAppMode('GENERATE'); break;
+                    case '2': setAppMode('CHARACTER_CREATOR'); break;
+                    case '3': setAppMode('REMOVE_BG'); break;
+                    case '4': setAppMode('DRAW'); break;
+                    case '5': setAppMode('HISTORY'); break;
+                }
+                return;
+            }
+            
+            // Other global hotkeys
             if (isMod && e.key.toLowerCase() === 'backspace') {
                 e.preventDefault();
                 handleClearSettings();
@@ -396,19 +475,10 @@ const App: React.FC = () => {
                 e.preventDefault();
                 handleInspirePrompt();
             }
-            if (isMod && e.altKey) {
-                switch(e.key) {
-                    case '1': setAppMode('GENERATE'); break;
-                    case '2': setAppMode('CHARACTER_CREATOR'); break;
-                    case '3': setAppMode('REMOVE_BG'); break;
-                    case '4': setAppMode('DRAW'); break;
-                    case '5': setAppMode('HISTORY'); break;
-                }
-            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [appMode, handleGenerate, handleRemoveBackground, handleClearSettings, handleOptimizePrompt, handleInspirePrompt]);
+    }, [appMode, handleGenerate, handleRemoveBackground, handleClearSettings, handleOptimizePrompt, handleInspirePrompt, handleUseDrawing]);
     
     // Paste from clipboard
     useEffect(() => {
@@ -458,7 +528,7 @@ const App: React.FC = () => {
                     addToast={addToast}
                     onUseImage={handleUseImage}
                     onUpscale={handleUpscale}
-                    onZoomOut={handleZoomOut}
+                    onZoomOut={onZoomOut}
                 />
             );
         }
@@ -472,6 +542,7 @@ const App: React.FC = () => {
                         aspectRatio={drawAspectRatio}
                         backgroundColor={canvasBackgroundColor}
                         backgroundImage={drawBackgroundImage}
+                        isPreviewingBrushSize={isPreviewingBrushSize}
                     />;
         }
         return (
@@ -481,7 +552,7 @@ const App: React.FC = () => {
                 error={error}
                 onPromptSelect={(p) => { setPrompt(p); setAppMode('GENERATE'); }}
                 onUpscale={handleUpscale}
-                onZoomOut={handleZoomOut}
+                onZoomOut={onZoomOut}
                 onSetLightboxConfig={(images, startIndex) => setLightboxConfig({ images, startIndex })}
             />
         );
@@ -492,7 +563,7 @@ const App: React.FC = () => {
             <ControlPanel
                 appMode={appMode}
                 setAppMode={setAppMode}
-                onGenerate={handleGenerate}
+                onGenerate={() => handleGenerate()}
                 onRemoveBackground={handleRemoveBackground}
                 isLoading={isLoading}
                 uploadedImage={uploadedImage}
@@ -515,7 +586,7 @@ const App: React.FC = () => {
                 drawTool={drawTool}
                 setDrawTool={setDrawTool}
                 brushSize={brushSize}
-                setBrushSize={setBrushSize}
+                onBrushSizeChange={handleBrushSizeChange}
                 fillColor={fillColor}
                 setFillColor={setFillColor}
                 strokeColor={strokeColor}
@@ -526,7 +597,7 @@ const App: React.FC = () => {
                 setCanvasBackgroundColor={setCanvasBackgroundColor}
                 onClearCanvas={() => drawingCanvasRef.current?.clear()}
                 onUndoCanvas={() => drawingCanvasRef.current?.undo()}
-                onUseDrawing={() => handleGenerate()}
+                onUseDrawing={handleUseDrawing}
                 onDrawBackgroundUpload={(file: File) => {
                     const reader = new FileReader();
                     reader.onload = (e) => setDrawBackgroundImage(e.target?.result as string);
@@ -552,7 +623,7 @@ const App: React.FC = () => {
                     config={lightboxConfig} 
                     onClose={() => setLightboxConfig(null)}
                     onUpscale={handleUpscale}
-                    onZoomOut={handleZoomOut}
+                    onZoomOut={onZoomOut}
                 />
             )}
             
