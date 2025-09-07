@@ -1,8 +1,7 @@
 import React from 'react';
 
 // Aspect Ratios for UI
-// FIX: Add 'as const' to ensure the array elements are treated as literal types, compatible with the AspectRatio type.
-export const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const;
+export const ASPECT_RATIOS = ['11:6', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '6:11'] as const;
 
 // Aspect Ratios supported directly by the Imagen API
 export const API_SUPPORTED_ASPECT_RATIOS = ["1:1", "3:4", "4:3", "9:16", "16:9"];

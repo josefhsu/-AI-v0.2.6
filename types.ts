@@ -1,50 +1,44 @@
-import { Part } from '@google/genai';
+import { ASPECT_RATIOS } from './constants';
 
 export type AppMode = 'GENERATE' | 'CHARACTER_CREATOR' | 'REMOVE_BG' | 'DRAW' | 'HISTORY';
 
-export type AspectRatio = '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
+export type AspectRatio = typeof ASPECT_RATIOS[number];
 
-export interface UploadedImage {
-  src: string;
-  file: File;
-}
+export type UploadedImage = {
+    src: string;
+    file: File;
+};
 
-export interface GeneratedImage {
-  id: string;
-  src: string;
-  alt: string;
-  width?: number;
-  height?: number;
-  size?: number; // size in bytes
-}
+export type GeneratedImage = {
+    id: string;
+    src: string;
+    alt: string; // The prompt used
+    width?: number;
+    height?: number;
+    size?: number; // in bytes
+    analysis?: {
+        score: string;
+        analysis: string;
+    } | null;
+};
 
-export interface HistoryItem extends GeneratedImage {
-  timestamp: number;
-  analysis?: AestheticAnalysis;
-}
+export type HistoryItem = GeneratedImage;
 
 export type DrawTool = 'brush' | 'rectangle' | 'circle' | 'arrow';
 
-export interface DrawingCanvasRef {
-  exportImage: () => string;
-  clear: () => void;
-  undo: () => void;
-}
-
-export interface AestheticAnalysis {
-    score: string;
-    analysis: string;
-}
-
-export interface Toast {
-    id: number;
-    message: string;
-    type: 'success' | 'error' | 'info';
-}
-
-export type GenerativePart = Part;
-
-export interface LightboxConfig {
+export type LightboxConfig = {
     images: GeneratedImage[];
     startIndex: number;
-}
+} | null;
+
+export type Toast = {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+};
+
+export type DrawingCanvasRef = {
+    exportImage: () => string; // returns data URL
+    clear: () => void;
+    undo: () => void;
+};

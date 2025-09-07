@@ -1,12 +1,11 @@
+
 import { GoogleGenAI, Part, Modality, Type } from '@google/genai';
 import type { AspectRatio } from '../types';
 
-// FIX: Initialize GoogleGenAI with an object containing the API key as per the guidelines.
-// FIX: Use GoogleGenAI instead of the deprecated GoogleGenerativeAI.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Converts a File object to a GoogleGenerativeAI.Part object.
+ * Converts a File object to a Part object.
  * @param file The file to convert.
  * @returns A promise that resolves to a Part object.
  */
@@ -238,7 +237,7 @@ export const enhanceWebcamImage = async (base64ImageData: string, mimeType: stri
 
 /**
  * Analyzes the aesthetics of an image and provides a score and critique.
- * @param imagePart The image to analyze as a GoogleGenerativeAI.Part.
+ * @param imagePart The image to analyze as a Part.
  * @returns A promise that resolves to an object with a score and analysis.
  */
 export const analyzeImageAesthetics = async (imagePart: Part): Promise<{ score: string; analysis: string; }> => {

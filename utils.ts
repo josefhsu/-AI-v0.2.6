@@ -1,3 +1,5 @@
+import type { AspectRatio } from './types';
+
 /**
  * Downloads an image from a data URL or blob URL.
  * @param url The URL of the image to download.
@@ -73,7 +75,7 @@ export const getMimeTypeFromDataUrl = (dataUrl: string): string => {
  * @param color The background color of the placeholder.
  * @returns A data URL string of the generated image.
  */
-export const createPlaceholderImage = (aspectRatio: '1:1' | '3:4' | '4:3' | '9:16' | '16:9', color: string): string => {
+export const createPlaceholderImage = (aspectRatio: AspectRatio, color: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     // Use a small base size for efficiency
     const canvasWidth = w * 100;

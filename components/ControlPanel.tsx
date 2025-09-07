@@ -257,8 +257,8 @@ const ImageUploader: React.FC<{
     );
 };
 
-const VersionInfo: React.FC = () => (
-    <div className="flex flex-col h-full text-slate-500 p-4 overflow-y-auto">
+const VersionInfo: React.FC<{ modifierKey: 'Ctrl' | '⌘' }> = ({ modifierKey }) => (
+    <div className="flex flex-col h-full text-slate-400 p-4 overflow-y-auto">
         <div className="flex-1 flex flex-col items-center justify-center text-center">
             <div className="w-24 h-24 mb-4">
                 <svg viewBox="0 0 280 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -275,9 +275,9 @@ const VersionInfo: React.FC = () => (
                     </text>
                 </svg>
             </div>
-            <h3 className="text-2xl font-semibold text-cyan-400">鳥巢AI包娜娜 v0.2.6</h3>
-            <p className="text-xl mt-2 mb-4">主要功能介紹：</p>
-            <ul className="text-xm text-left space-y-2 list-disc list-inside bg-black/20 p-4 rounded-lg">
+            <h3 className="text-xl font-semibold text-cyan-400">鳥巢AI包娜娜 v0.2.6</h3>
+            <p className="text-lg mt-2 mb-4">主要功能介紹：</p>
+            <ul className="text-sm text-left space-y-2 list-disc list-inside bg-black/20 p-4 rounded-lg">
                 <li>賽博龐克風格介面與快捷鍵支援</li>
                 <li>AI 繪圖、角色創造與提示詞優化</li>
                 <li>智慧背景移除與綠幕功能</li>
@@ -286,20 +286,48 @@ const VersionInfo: React.FC = () => (
                 <li>沉浸式 Lightbox 瀏覽（縮放與平移）</li>
                 <li>一鍵提升畫質與 Zoom Out 擴圖</li>
             </ul>
-             <div className="mt-6 text-2xl text-slate-400 border-t border-fuchsia-500/20 pt-4 w-full">
+
+            <div className="mt-6 text-left w-full text-sm">
+                <h4 className="text-lg font-semibold text-cyan-400 mb-3">快捷鍵清單</h4>
+                <div className="text-slate-400 space-y-4">
+                    <div>
+                        <p className="font-bold text-fuchsia-400">全域操作</p>
+                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Enter</code>: 執行主要操作</li>
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + I</code>: 獲取靈感提示</li>
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + O</code>: 自動優化提示詞</li>
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Backspace</code>: 清除設定</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p className="font-bold text-fuchsia-400">模式切換</p>
+                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Alt + 1-5</code>: 切換至對應面板</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p className="font-bold text-fuchsia-400">塗鴉板專用</p>
+                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">[</code>: 減少筆刷/線條寬度</li>
+                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">]</code>: 增加筆刷/線條寬度</li>
+                        </ul>
+                    </div>
+                </div>
+            <div className="mt-6 text-xl text-slate-400 border-t border-fuchsia-500/20 pt-4 w-full">
                 <p className="font-bold text-cyan-400 mb-2">2025歡迎邀約鳥巢AI</p>
                 <p>想學最新AI生成影音工具嗎？</p>
                 <p>企業想找AI工具顧問減少摸索時間？</p>
                 <p className="mb-2">
-                    歡迎找鳥巢AI <a href="https://aiarttw.us/contact" target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:underline">https://aiarttw.us/contact</a>
+                    歡迎找鳥巢AI預約 <a href="https://aiarttw.us/contact" target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:underline">https://aiarttw.us/contact</a>
                 </p>
                 <p className="text-slate-500">
                     #300場AI活動經歷<br />
                     #企業生成式AI代訓<br />
                     #鳥巢AI影音教學合作洽詢 <br />
-                    #SunoV45+ #AI歌以載道 
+                    #SunoV45+ #AI歌以載道 <br />
+                    鳥巢AI歌曲 <br /><a href="https://aiarttw.us/aisong" target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:underline">https://aiarttw.us/aisong</a>
                 </p>
-            </div>
+            </div></div>
         </div>
     </div>
 );
@@ -619,7 +647,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
             case 'CHARACTER_CREATOR': return renderCharacterCreatorPanel();
             case 'REMOVE_BG': return renderRemoveBgPanel();
             case 'DRAW': return renderDrawPanel();
-            case 'HISTORY': return <VersionInfo />;
+            case 'HISTORY': return <VersionInfo modifierKey={modifierKey} />;
             default: return null;
         }
     };
