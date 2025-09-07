@@ -1,7 +1,8 @@
 import { GoogleGenAI, Part, Modality, Type } from '@google/genai';
 import type { AspectRatio } from '../types';
 
-// FIX: Initialize GoogleGenAI with process.env.API_KEY as per the guidelines.
+// FIX: Initialize GoogleGenAI with an object containing the API key as per the guidelines.
+// FIX: Use GoogleGenAI instead of the deprecated GoogleGenerativeAI.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**

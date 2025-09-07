@@ -2,350 +2,110 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ControlPanel } from './components/ControlPanel';
 import { ResultPanel } from './components/ResultPanel';
 import { HistoryPanel } from './components/HistoryPanel';
-import { DrawingCanvas } from './components/DrawingCanvas';
 import { Lightbox } from './components/Lightbox';
-import type { 
-    AppMode, GeneratedImage, UploadedImage, AspectRatio, HistoryItem, 
-    DrawingCanvasRef, DrawTool, LightboxConfig, Toast
-} from './types';
-import * as geminiService from './services/geminiService';
-import { dataURLtoFile, cropImageToAspectRatio, getOS } from './utils';
-import { API_SUPPORTED_ASPECT_RATIOS, SUBJECTS, BACKGROUNDS, ACTIONS_POSES, EMOTIONS, CLOTHING, DETAILS_OBJECTS, ART_STYLES, LIGHTING, COMPOSITIONS, TONES_TEXTURES } from './constants';
+import { DrawingCanvas } from './components/DrawingCanvas';
+import type { AppMode, AspectRatio, UploadedImage, GeneratedImage, HistoryItem, Toast, LightboxConfig, DrawTool, DrawingCanvasRef } from './types';
+import * as gemini from './services/geminiService';
+import { dataURLtoFile, fileToBase64, getMimeTypeFromDataUrl } from './utils';
+import { SUBJECTS, BACKGROUNDS, ACTIONS_POSES, EMOTIONS, CLOTHING, DETAILS_OBJECTS, ART_STYLES, LIGHTING, COMPOSITIONS, TONES_TEXTURES } from './constants';
+
+const HISTORY_STORAGE_KEY = 'bn-cyberpunk-history-v1';
+const MAX_HISTORY_ITEMS = 50;
 
 const App: React.FC = () => {
     // Core State
     const [appMode, setAppMode] = useState<AppMode>('GENERATE');
     const [isLoading, setIsLoading] = useState(false);
+    const [isOptimizing, setIsOptimizing] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [prompt, setPrompt] = useState('');
+    const [toasts, setToasts] = useState<Toast[]>([]);
 
-    // Image & Generation State
-    const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
-    const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
-    const [referenceImages, setReferenceImages] = useState<UploadedImage[]>([]);
+    // Prompt & Generation State
+    const [prompt, setPrompt] = useState('');
     const [numImages, setNumImages] = useState(1);
     const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>('1:1');
-    const [isOptimizing, setIsOptimizing] = useState(false);
+    const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
 
-    // Remove BG State
+    // Image & Asset State
+    const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
+    const [referenceImages, setReferenceImages] = useState<UploadedImage[]>([]);
     const [addGreenScreen, setAddGreenScreen] = useState(false);
-
-    // Drawing State
-    const drawingCanvasRef = useRef<DrawingCanvasRef>(null);
-    const [drawTool, setDrawTool] = useState<DrawTool>('brush');
-    const [brushSize, setBrushSize] = useState(10);
-    const [fillColor, setFillColor] = useState('transparent');
-    const [strokeColor, setStrokeColor] = useState('#FFFFFF');
-    const [drawAspectRatio, setDrawAspectRatio] = useState<AspectRatio>('1:1');
-    const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#111827');
-    const [drawBackgroundImage, setDrawBackgroundImage] = useState<string | null>(null);
 
     // History State
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+    // Drawing Canvas State
+    const drawingCanvasRef = useRef<DrawingCanvasRef>(null);
+    const [drawTool, setDrawTool] = useState<DrawTool>('brush');
+    const [brushSize, setBrushSize] = useState(10);
+    const [strokeColor, setStrokeColor] = useState('#FFFFFF');
+    const [fillColor, setFillColor] = useState('transparent');
+    const [drawAspectRatio, setDrawAspectRatio] = useState<AspectRatio>('1:1');
+    const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#121212');
+    const [drawBackgroundImage, setDrawBackgroundImage] = useState<string | null>(null);
 
     // UI State
     const [lightboxConfig, setLightboxConfig] = useState<LightboxConfig | null>(null);
-    const [toasts, setToasts] = useState<Toast[]>([]);
     const [isControlPanelOpen, setIsControlPanelOpen] = useState(true);
-    const [isMobile, setIsMobile] = useState(false);
-    const [modifierKey, setModifierKey] = useState<'Ctrl' | '⌘'>('Ctrl');
-
-    // --- Handlers ---
-    
-    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
-        const id = Date.now();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 3000);
-    }, [setToasts]);
-
-    const addToHistory = useCallback((images: GeneratedImage[]) => {
-        const newHistoryItems: HistoryItem[] = images.map(img => ({
-            ...img,
-            timestamp: Date.now(),
-        }));
-        setHistory(prev => [...newHistoryItems, ...prev]);
-    }, [setHistory]);
-
-    const handleGenerate = useCallback(async () => {
-        if (!prompt && referenceImages.length === 0) {
-            setError("請輸入提示詞或上傳參考圖。");
-            return;
-        }
-        setIsLoading(true);
-        setError(null);
-        setGeneratedImages([]);
-
-        try {
-            const imageParts = await Promise.all(referenceImages.map(img => geminiService.fileToGenerativePart(img.file)));
-            
-            const results = await geminiService.generateImagesWithGemini(
-                prompt,
-                numImages,
-                selectedAspectRatio,
-                imageParts
-            );
-
-            let finalImages = results.map((base64, index) => {
-                const id = `gen-${Date.now()}-${index}`;
-                return {
-                    id,
-                    src: `data:image/png;base64,${base64}`,
-                    alt: prompt,
-                };
-            });
-            
-            // Crop if aspect ratio is not API supported
-            if (!API_SUPPORTED_ASPECT_RATIOS.includes(selectedAspectRatio) && referenceImages.length === 0) {
-                finalImages = await Promise.all(finalImages.map(async (img) => {
-                    const croppedSrc = await cropImageToAspectRatio(img.src, selectedAspectRatio);
-                    return { ...img, src: croppedSrc };
-                }));
-            }
-
-            setGeneratedImages(finalImages);
-            addToHistory(finalImages);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "發生未知錯誤";
-            setError(message);
-            console.error("Generation failed:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [prompt, numImages, selectedAspectRatio, referenceImages, addToHistory]);
-
-    const handleRemoveBackground = useCallback(async () => {
-        if (!uploadedImage) {
-            setError("請先上傳一張圖片。");
-            return;
-        }
-        setIsLoading(true);
-        setError(null);
-        setGeneratedImages([]);
-        try {
-            const base64Data = uploadedImage.src.split(',')[1];
-            const result = await geminiService.removeBackground(base64Data, uploadedImage.file.type, addGreenScreen);
-
-            if (result.image) {
-                const newImage: GeneratedImage = {
-                    id: `bg-rem-${Date.now()}`,
-                    src: `data:image/png;base64,${result.image}`,
-                    alt: `Background removed from ${uploadedImage.file.name}`,
-                };
-                setGeneratedImages([newImage]);
-                addToHistory([newImage]);
-            } else {
-                throw new Error(result.text || "模型未返回圖片。");
-            }
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "移除背景時發生錯誤";
-            setError(message);
-            console.error("Remove background failed:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [uploadedImage, addGreenScreen, addToHistory]);
-    
-    const handleUpscale = useCallback(async (src: string) => {
-        setIsLoading(true);
-        setError(null);
-        addToast("正在提升畫質...");
-        try {
-            const file = dataURLtoFile(src, 'upscale-source.png');
-            const base64Data = src.split(',')[1];
-            const upscaledBase64 = await geminiService.upscaleImageWithGemini(base64Data, file.type);
-            
-            const newImage: GeneratedImage = {
-                id: `upscaled-${Date.now()}`,
-                src: `data:image/png;base64,${upscaledBase64}`,
-                alt: 'Upscaled Image'
-            };
-            
-            setGeneratedImages(prev => [newImage, ...prev]);
-            addToHistory([newImage]);
-            addToast("畫質提升成功！", 'success');
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "發生未知錯誤";
-            setError(message);
-            console.error("Upscale failed:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [addToHistory, addToast]);
-
-    const handleZoomOut = useCallback(async (src: string) => {
-        setIsLoading(true);
-        setError(null);
-        addToast("正在擴展圖片 (Zoom Out)...");
-        try {
-            const file = dataURLtoFile(src, 'zoom-out-source.png');
-            const imagePart = await geminiService.fileToGenerativePart(file);
-            const zoomOutPrompt = "zoom out 2x, outpainting, expand the image, fill in the details seamlessly";
-            const results = await geminiService.generateImagesWithGemini(zoomOutPrompt, 1, '1:1', [imagePart]);
-
-            const newImage: GeneratedImage = {
-                id: `zoomed-${Date.now()}`,
-                src: `data:image/png;base64,${results[0]}`,
-                alt: 'Zoomed Out Image'
-            };
-
-            setGeneratedImages(prev => [newImage, ...prev]);
-            addToHistory([newImage]);
-            addToast("圖片擴展成功！", 'success');
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "發生未知錯誤";
-            setError(message);
-            console.error("Zoom out failed:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [addToHistory, addToast]);
-
-
-    const handleOptimizePrompt = useCallback(async () => {
-        if (!prompt) return;
-        setIsOptimizing(true);
-        try {
-            const optimized = await geminiService.optimizePromptWithGemini(prompt);
-            setPrompt(optimized);
-        } catch (err) {
-            console.error("Prompt optimization failed:", err);
-            addToast('提示詞優化失敗', 'error');
-        } finally {
-            setIsOptimizing(false);
-        }
-    }, [prompt, addToast]);
-
-    const getRandomItem = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-    
-    const handleInspirePrompt = useCallback(() => {
-        const inspired = [
-            getRandomItem(SUBJECTS),
-            getRandomItem(BACKGROUNDS),
-            getRandomItem(ACTIONS_POSES),
-            getRandomItem(EMOTIONS),
-            getRandomItem(CLOTHING),
-            getRandomItem(DETAILS_OBJECTS),
-            getRandomItem(ART_STYLES),
-            getRandomItem(LIGHTING),
-            getRandomItem(COMPOSITIONS),
-            getRandomItem(TONES_TEXTURES)
-        ].join(', ');
-        setPrompt(inspired);
-    }, []);
-
-    const handleClearSettings = useCallback(() => {
-        setPrompt('');
-        setReferenceImages([]);
-        setUploadedImage(null);
-        setGeneratedImages([]);
-        setError(null);
-        setSelectedAspectRatio('1:1');
-        setNumImages(1);
-    }, []);
-
-    const handleUseDrawing = useCallback(() => {
-        const imageB64 = drawingCanvasRef.current?.exportImage();
-        if (imageB64) {
-            const file = dataURLtoFile(imageB64, `drawing-${Date.now()}.png`);
-            setReferenceImages([{ src: imageB64, file }]);
-            setAppMode('GENERATE');
-            addToast("畫布已作為參考圖使用", 'success');
-        }
-    }, [addToast]);
-    
-    const handleUseHistoryItem = useCallback((item: HistoryItem) => {
-        const file = dataURLtoFile(item.src, `history-${item.id}.png`);
-        setReferenceImages(prev => [{ src: item.src, file }, ...prev].slice(0, 8));
-        setPrompt(item.alt);
-        setAppMode('GENERATE');
-        addToast('歷史紀錄已作為參考圖與提示詞', 'success');
-    }, [addToast]);
-    
-    const handleDeleteHistoryItem = useCallback((id: string) => {
-        setHistory(prev => prev.filter(item => item.id !== id));
-        if (selectedHistoryItem?.id === id) {
-            setSelectedHistoryItem(null);
-        }
-        addToast('歷史紀錄已刪除', 'success');
-    }, [selectedHistoryItem, addToast, setHistory, setSelectedHistoryItem]);
-    
-    const handleClearHistory = useCallback(() => {
-        if (window.confirm('您確定要清除所有歷史紀錄嗎？此操作無法復原。')) {
-            setHistory([]);
-            setSelectedHistoryItem(null);
-            addToast('所有歷史紀錄已清除', 'success');
-        }
-    }, [addToast, setHistory, setSelectedHistoryItem]);
-    
-    const handleUseImage = useCallback((src: string, targetMode: AppMode) => {
-        const file = dataURLtoFile(src, `used-image-${Date.now()}.png`);
-        const image = { src, file };
-        if(targetMode === 'REMOVE_BG') {
-            setUploadedImage(image);
-        } else if (targetMode === 'DRAW') {
-            setDrawBackgroundImage(src);
-        }
-        setAppMode(targetMode);
-    }, []);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const modifierKey = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘' : 'Ctrl';
 
     // --- Effects ---
 
-    // Load history from localStorage on mount
+    // Load/Save History
     useEffect(() => {
         try {
-            const savedHistory = localStorage.getItem('bn-history');
+            const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
             if (savedHistory) {
                 setHistory(JSON.parse(savedHistory));
             }
         } catch (e) {
             console.error("Failed to load history from localStorage", e);
         }
-        
-        const os = getOS();
-        setIsMobile(os === 'mobile');
-        setModifierKey(os === 'mac' ? '⌘' : 'Ctrl');
-
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        handleResize(); // initial check
-
-        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Save history to localStorage when it changes
     useEffect(() => {
         try {
-            localStorage.setItem('bn-history', JSON.stringify(history));
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
         } catch (e) {
             console.error("Failed to save history to localStorage", e);
         }
     }, [history]);
-    
-    // Aesthetic Analysis when history item is selected
+
+    // Handle mobile view
+    useEffect(() => {
+        const handleResize = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            if (!mobile) setIsControlPanelOpen(true);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Analyze selected history item
     useEffect(() => {
         if (selectedHistoryItem && !selectedHistoryItem.analysis && !isAnalyzing) {
             const analyze = async () => {
                 setIsAnalyzing(true);
                 setAnalysisError(null);
                 try {
-                    const imageFile = dataURLtoFile(selectedHistoryItem.src, 'analysis-image.png');
-                    const imagePart = await geminiService.fileToGenerativePart(imageFile);
-                    const analysisResult = await geminiService.analyzeImageAesthetics(imagePart);
+                    const file = dataURLtoFile(selectedHistoryItem.src, 'history-item.png');
+                    const imagePart = await gemini.fileToGenerativePart(file);
+                    const analysisResult = await gemini.analyzeImageAesthetics(imagePart);
                     
-                    const updatedHistoryItem = { ...selectedHistoryItem, analysis: analysisResult };
+                    setHistory(prev => prev.map(item => 
+                        item.id === selectedHistoryItem.id ? { ...item, analysis: analysisResult } : item
+                    ));
+                    setSelectedHistoryItem(prev => prev ? { ...prev, analysis: analysisResult } : null);
                     
-                    setHistory(prev => prev.map(item => item.id === selectedHistoryItem.id ? updatedHistoryItem : item));
-                    setSelectedHistoryItem(updatedHistoryItem);
-
                 } catch (err) {
-                    const message = err instanceof Error ? err.message : "Unknown analysis error";
-                    setAnalysisError(message);
                     console.error("Aesthetic analysis failed:", err);
+                    const message = err instanceof Error ? err.message : "Unknown error";
+                    setAnalysisError(`分析失敗: ${message}`);
                 } finally {
                     setIsAnalyzing(false);
                 }
@@ -354,87 +114,324 @@ const App: React.FC = () => {
         }
     }, [selectedHistoryItem, isAnalyzing]);
 
+    // --- Toast Management ---
+    const addToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(toast => toast.id !== id));
+        }, 3000);
+    }, []);
+
+    // --- Core Action Handlers ---
+
+    const handleGenerate = useCallback(async () => {
+        setError(null);
+        if (!prompt.trim() && referenceImages.length === 0 && appMode !== 'DRAW') {
+            setError("請輸入提示詞或上傳參考圖。");
+            return;
+        }
+
+        setIsLoading(true);
+        setGeneratedImages([]);
+        if (isMobile) setIsControlPanelOpen(false);
+
+        try {
+            let combinedReferenceParts = [];
+            
+            // Handle drawing canvas input
+            if (appMode === 'DRAW') {
+                const drawingDataUrl = drawingCanvasRef.current?.exportImage();
+                if (drawingDataUrl) {
+                    const drawingFile = dataURLtoFile(drawingDataUrl, 'drawing.png');
+                    const drawingPart = await gemini.fileToGenerativePart(drawingFile);
+                    combinedReferenceParts.push(drawingPart);
+                }
+            }
+
+            // Handle uploaded reference images
+            for (const img of referenceImages) {
+                const part = await gemini.fileToGenerativePart(img.file);
+                combinedReferenceParts.push(part);
+            }
+            
+            const imageDatas = await gemini.generateImagesWithGemini(prompt, numImages, selectedAspectRatio, combinedReferenceParts);
+
+            const newImages: GeneratedImage[] = imageDatas.map((base64) => ({
+                id: crypto.randomUUID(),
+                src: `data:image/png;base64,${base64}`,
+                alt: prompt,
+            }));
+
+            setGeneratedImages(newImages);
+            setAppMode('GENERATE'); // Switch back to generate mode if needed
+            
+            // Add to history
+            const newHistoryItems: HistoryItem[] = newImages.map(img => ({
+                ...img,
+                timestamp: Date.now(),
+            }));
+            setHistory(prev => [...newHistoryItems, ...prev].slice(0, MAX_HISTORY_ITEMS));
+
+        } catch (err) {
+            console.error("Generation failed:", err);
+            const message = err instanceof Error ? err.message : "Unknown error";
+            setError(`生成失敗: ${message}`);
+            addToast(`生成失敗: ${message}`, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [prompt, numImages, selectedAspectRatio, referenceImages, isMobile, appMode, addToast]);
+
+    const handleRemoveBackground = useCallback(async () => {
+        if (!uploadedImage) {
+            setError("請先上傳圖片。");
+            return;
+        }
+        setIsLoading(true);
+        setError(null);
+        if (isMobile) setIsControlPanelOpen(false);
+
+        try {
+            const base64Data = await fileToBase64(uploadedImage.file);
+            const result = await gemini.removeBackground(base64Data, uploadedImage.file.type, addGreenScreen);
+
+            if (!result.image) {
+                throw new Error(result.text || "模型未返回圖片。");
+            }
+
+            const newImage: GeneratedImage = {
+                id: crypto.randomUUID(),
+                src: `data:image/png;base64,${result.image}`,
+                alt: `Background removed from ${uploadedImage.file.name}`,
+            };
+            setGeneratedImages([newImage]);
+            setAppMode('GENERATE');
+
+            const newHistoryItem: HistoryItem = { ...newImage, timestamp: Date.now() };
+            setHistory(prev => [newHistoryItem, ...prev].slice(0, MAX_HISTORY_ITEMS));
+
+        } catch (err) {
+            console.error("Background removal failed:", err);
+            const message = err instanceof Error ? err.message : "Unknown error";
+            setError(`背景移除失敗: ${message}`);
+            addToast(`背景移除失敗: ${message}`, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [uploadedImage, addGreenScreen, isMobile, addToast]);
+
+    const handleOptimizePrompt = useCallback(async () => {
+        if (!prompt.trim()) {
+            addToast("請先輸入提示詞。", 'info');
+            return;
+        }
+        setIsOptimizing(true);
+        try {
+            const optimized = await gemini.optimizePromptWithGemini(prompt);
+            setPrompt(optimized);
+            addToast("提示詞已優化！", 'success');
+        } catch (err) {
+            console.error("Prompt optimization failed:", err);
+            const message = err instanceof Error ? err.message : "Unknown error";
+            addToast(`優化失敗: ${message}`, 'error');
+        } finally {
+            setIsOptimizing(false);
+        }
+    }, [prompt, addToast]);
+    
+    // --- UI & Helper Handlers ---
+
+    const handleClearSettings = useCallback(() => {
+        setPrompt('');
+        setReferenceImages([]);
+        setUploadedImage(null);
+    }, []);
+
+    const handleInspirePrompt = useCallback(() => {
+        const randomItem = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)];
+        const newPrompt = [
+            randomItem(SUBJECTS),
+            randomItem(ACTIONS_POSES),
+            `在${randomItem(BACKGROUNDS)}`,
+            `(${randomItem(ART_STYLES)})`,
+            `燈光是${randomItem(LIGHTING)}`,
+            `構圖為${randomItem(COMPOSITIONS)}`,
+            `${randomItem(TONES_TEXTURES)}`,
+        ].join(', ');
+        setPrompt(newPrompt);
+    }, []);
+
+    const handleRemoveReferenceImage = (index: number) => {
+        setReferenceImages(prev => prev.filter((_, i) => i !== index));
+    };
+    
+    const handleUpscale = useCallback(async (src: string) => {
+        setIsLoading(true);
+        setError(null);
+        if (isMobile) setIsControlPanelOpen(false);
+        addToast("正在提升畫質...", 'info');
+        
+        try {
+            const base64 = src.split(',')[1];
+            const mimeType = getMimeTypeFromDataUrl(src);
+            const upscaledBase64 = await gemini.upscaleImageWithGemini(base64, mimeType);
+            
+            const newImage: GeneratedImage = {
+                id: crypto.randomUUID(),
+                src: `data:image/png;base64,${upscaledBase64}`,
+                alt: `Upscaled image`,
+            };
+            setGeneratedImages([newImage]);
+            setAppMode('GENERATE');
+            
+            const newHistoryItem: HistoryItem = { ...newImage, timestamp: Date.now() };
+            setHistory(prev => [newHistoryItem, ...prev].slice(0, MAX_HISTORY_ITEMS));
+            addToast("畫質提升成功！", 'success');
+
+        } catch(err) {
+            console.error("Upscale failed:", err);
+            const message = err instanceof Error ? err.message : "Unknown error";
+            setError(`提升畫質失敗: ${message}`);
+            addToast(`提升畫質失敗: ${message}`, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [isMobile, addToast]);
+
+    const handleZoomOut = useCallback(async (src: string) => {
+        addToast("Zoom Out 功能即將推出！", 'info');
+        console.log("Zoom Out requested for:", src);
+    }, [addToast]);
+    
+    // History Panel Handlers
+    const handleUseHistoryItem = (item: HistoryItem) => {
+        const file = dataURLtoFile(item.src, `history-${item.id}.png`);
+        setReferenceImages(prev => [...prev, { src: item.src, file }].slice(0, 8));
+        setAppMode('GENERATE');
+        addToast("圖片已添加至參考圖", 'success');
+    };
+
+    const handleDeleteHistoryItem = (id: string) => {
+        setHistory(prev => prev.filter(item => item.id !== id));
+        if (selectedHistoryItem?.id === id) {
+            setSelectedHistoryItem(null);
+        }
+        addToast("紀錄已刪除", 'success');
+    };
+
+    const handleClearHistory = () => {
+        if (window.confirm("確定要清除所有歷史紀錄嗎？此操作無法復原。")) {
+            setHistory([]);
+            setSelectedHistoryItem(null);
+            addToast("歷史紀錄已清除", 'success');
+        }
+    };
+    
+    const handleUseImage = (src: string, targetMode: AppMode) => {
+        const file = dataURLtoFile(src, 'reused-image.png');
+        const uploaded: UploadedImage = { src, file };
+        
+        if (targetMode === 'REMOVE_BG') {
+            setUploadedImage(uploaded);
+        } else if (targetMode === 'DRAW') {
+            setDrawBackgroundImage(src);
+        }
+        
+        setAppMode(targetMode);
+        addToast(`圖片已載入至 ${targetMode === 'REMOVE_BG' ? '背景移除' : '塗鴉板'}`, 'success');
+    };
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            const modifier = (modifierKey === '⌘' ? e.metaKey : e.ctrlKey);
-
-            if (modifier && e.key.toLowerCase() === 'enter') {
+            const isMod = e.ctrlKey || e.metaKey;
+            
+            if (isMod && e.key.toLowerCase() === 'enter') {
                 e.preventDefault();
-                if (appMode === 'GENERATE' || appMode === 'CHARACTER_CREATOR') handleGenerate();
-                else if (appMode === 'REMOVE_BG') handleRemoveBackground();
-                else if (appMode === 'DRAW') handleUseDrawing();
+                if (appMode === 'GENERATE' || appMode === 'CHARACTER_CREATOR' || appMode === 'DRAW') handleGenerate();
+                if (appMode === 'REMOVE_BG') handleRemoveBackground();
             }
-            if (modifier && e.key.toLowerCase() === 'o') { e.preventDefault(); handleOptimizePrompt(); }
-            if (modifier && e.key.toLowerCase() === 'i') { e.preventDefault(); handleInspirePrompt(); }
-            if (modifier && e.key.toLowerCase() === 'backspace') { e.preventDefault(); handleClearSettings(); }
-            if (e.altKey) {
+            if (isMod && e.key.toLowerCase() === 'backspace') {
+                e.preventDefault();
+                handleClearSettings();
+            }
+            if (isMod && e.key.toLowerCase() === 'o') {
+                e.preventDefault();
+                handleOptimizePrompt();
+            }
+             if (isMod && e.key.toLowerCase() === 'i') {
+                e.preventDefault();
+                handleInspirePrompt();
+            }
+            if (isMod && e.altKey) {
                 switch(e.key) {
-                    case '1': e.preventDefault(); setAppMode('GENERATE'); break;
-                    case '2': e.preventDefault(); setAppMode('CHARACTER_CREATOR'); break;
-                    case '3': e.preventDefault(); setAppMode('REMOVE_BG'); break;
-                    case '4': e.preventDefault(); setAppMode('DRAW'); break;
-                    case '5': e.preventDefault(); setAppMode('HISTORY'); break;
+                    case '1': setAppMode('GENERATE'); break;
+                    case '2': setAppMode('CHARACTER_CREATOR'); break;
+                    case '3': setAppMode('REMOVE_BG'); break;
+                    case '4': setAppMode('DRAW'); break;
+                    case '5': setAppMode('HISTORY'); break;
                 }
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [appMode, modifierKey, handleGenerate, handleRemoveBackground, handleOptimizePrompt, handleInspirePrompt, handleClearSettings, handleUseDrawing]);
-
-    // Clipboard Paste
+    }, [appMode, handleGenerate, handleRemoveBackground, handleClearSettings, handleOptimizePrompt, handleInspirePrompt]);
+    
+    // Paste from clipboard
     useEffect(() => {
         const handlePaste = (event: ClipboardEvent) => {
             const items = event.clipboardData?.items;
             if (!items) return;
-
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
-                    const file = items[i].getAsFile();
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
                     if (file) {
                         const reader = new FileReader();
                         reader.onload = (e) => {
                             const src = e.target?.result as string;
-                            const uploaded: UploadedImage = { src, file };
-                            if (appMode === 'GENERATE' || appMode === 'CHARACTER_CREATOR') {
-                                setReferenceImages(prev => [...prev, uploaded].slice(0, 8));
-                            } else if (appMode === 'REMOVE_BG') {
-                                setUploadedImage(uploaded);
-                            } else if (appMode === 'DRAW') {
-                                setDrawBackgroundImage(src);
+                            const newImage = { src, file };
+                            if (appMode === 'REMOVE_BG') {
+                                setUploadedImage(newImage);
+                            } else {
+                                setReferenceImages(prev => [...prev, newImage].slice(0, 8));
                             }
                             addToast('圖片已從剪貼簿貼上', 'success');
                         };
                         reader.readAsDataURL(file);
+                        event.preventDefault();
+                        return;
                     }
                 }
             }
         };
-
         window.addEventListener('paste', handlePaste);
         return () => window.removeEventListener('paste', handlePaste);
     }, [appMode, addToast]);
 
+
     const renderMainPanel = () => {
-        switch (appMode) {
-            case 'GENERATE':
-            case 'CHARACTER_CREATOR':
-            case 'REMOVE_BG':
-                return (
-                    <ResultPanel
-                        images={generatedImages}
-                        isLoading={isLoading}
-                        error={error}
-                        onPromptSelect={(p) => { setPrompt(p); setAppMode('GENERATE'); }}
-                        onUpscale={handleUpscale}
-                        onZoomOut={handleZoomOut}
-                        onSetLightboxConfig={(images, startIndex) => setLightboxConfig({ images, startIndex })}
-                    />
-                );
-            case 'DRAW':
-                return (
-                    <DrawingCanvas
+        if (appMode === 'HISTORY') {
+            return (
+                <HistoryPanel
+                    history={history}
+                    selectedItem={selectedHistoryItem}
+                    onSelectItem={setSelectedHistoryItem}
+                    isAnalyzing={isAnalyzing}
+                    analysisError={analysisError}
+                    onUseHistoryItem={handleUseHistoryItem}
+                    onDeleteHistoryItem={handleDeleteHistoryItem}
+                    onClearHistory={handleClearHistory}
+                    onSetLightboxConfig={(images, startIndex) => setLightboxConfig({ images, startIndex })}
+                    addToast={addToast}
+                    onUseImage={handleUseImage}
+                    onUpscale={handleUpscale}
+                    onZoomOut={handleZoomOut}
+                />
+            );
+        }
+        if (appMode === 'DRAW') {
+            return <DrawingCanvas 
                         ref={drawingCanvasRef}
                         tool={drawTool}
                         brushSize={brushSize}
@@ -443,46 +440,23 @@ const App: React.FC = () => {
                         aspectRatio={drawAspectRatio}
                         backgroundColor={canvasBackgroundColor}
                         backgroundImage={drawBackgroundImage}
-                    />
-                );
-            case 'HISTORY':
-                return (
-                    <HistoryPanel
-                        history={history}
-                        selectedItem={selectedHistoryItem}
-                        onSelectItem={setSelectedHistoryItem}
-                        isAnalyzing={isAnalyzing}
-                        analysisError={analysisError}
-                        onUseHistoryItem={handleUseHistoryItem}
-                        onDeleteHistoryItem={handleDeleteHistoryItem}
-                        onClearHistory={handleClearHistory}
-                        onSetLightboxConfig={(images, startIndex) => setLightboxConfig({ images: images as GeneratedImage[], startIndex })}
-                        addToast={addToast}
-                        onUseImage={handleUseImage}
-                        onUpscale={handleUpscale}
-                        onZoomOut={handleZoomOut}
-                    />
-                );
-            default:
-                return null;
+                    />;
         }
+        return (
+            <ResultPanel
+                images={generatedImages}
+                isLoading={isLoading}
+                error={error}
+                onPromptSelect={(p) => { setPrompt(p); setAppMode('GENERATE'); }}
+                onUpscale={handleUpscale}
+                onZoomOut={handleZoomOut}
+                onSetLightboxConfig={(images, startIndex) => setLightboxConfig({ images, startIndex })}
+            />
+        );
     };
-    
-    const ToastContainer = () => (
-        <div className="fixed top-4 right-4 z-50 space-y-2">
-            {toasts.map(toast => (
-                <div key={toast.id} className={`px-4 py-2 rounded-md shadow-lg text-white ${
-                    toast.type === 'success' ? 'bg-green-600/80' :
-                    toast.type === 'error' ? 'bg-red-600/80' : 'bg-blue-600/80'
-                }`}>
-                    {toast.message}
-                </div>
-            ))}
-        </div>
-    );
 
     return (
-        <div className="flex h-screen bg-gray-900 text-white font-sans overflow-hidden">
+        <div className="flex h-screen bg-gray-900 text-white font-sans antialiased overflow-hidden">
             <ControlPanel
                 appMode={appMode}
                 setAppMode={setAppMode}
@@ -493,7 +467,7 @@ const App: React.FC = () => {
                 setUploadedImage={setUploadedImage}
                 referenceImages={referenceImages}
                 setReferenceImages={setReferenceImages}
-                onRemoveReferenceImage={(index) => setReferenceImages(prev => prev.filter((_, i) => i !== index))}
+                onRemoveReferenceImage={handleRemoveReferenceImage}
                 prompt={prompt}
                 setPrompt={setPrompt}
                 numImages={numImages}
@@ -520,8 +494,8 @@ const App: React.FC = () => {
                 setCanvasBackgroundColor={setCanvasBackgroundColor}
                 onClearCanvas={() => drawingCanvasRef.current?.clear()}
                 onUndoCanvas={() => drawingCanvasRef.current?.undo()}
-                onUseDrawing={handleUseDrawing}
-                onDrawBackgroundUpload={(file) => {
+                onUseDrawing={() => handleGenerate()}
+                onDrawBackgroundUpload={(file: File) => {
                     const reader = new FileReader();
                     reader.onload = (e) => setDrawBackgroundImage(e.target?.result as string);
                     reader.readAsDataURL(file);
@@ -532,29 +506,36 @@ const App: React.FC = () => {
                 modifierKey={modifierKey}
             />
 
-            <main className="flex-1 flex flex-col bg-black min-w-0">
-                 {renderMainPanel()}
-            </main>
+            <div className="flex-1 flex flex-col min-w-0">
+                {!isControlPanelOpen && isMobile && (
+                    <button onClick={() => setIsControlPanelOpen(true)} className="fixed top-2 left-2 z-50 p-2 bg-gray-800/80 rounded-full">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                )}
+                {renderMainPanel()}
+            </div>
             
             {lightboxConfig && (
                 <Lightbox 
                     config={lightboxConfig} 
-                    onClose={() => setLightboxConfig(null)} 
+                    onClose={() => setLightboxConfig(null)}
                     onUpscale={handleUpscale}
                     onZoomOut={handleZoomOut}
                 />
             )}
             
-            <ToastContainer />
-
-            {!isControlPanelOpen && isMobile && (
-                <button
-                    onClick={() => setIsControlPanelOpen(true)}
-                    className="fixed bottom-4 left-4 z-50 p-3 bg-fuchsia-600 rounded-full shadow-lg"
-                >
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                </button>
-            )}
+            {/* Toast Container */}
+            <div className="fixed bottom-4 right-4 z-[100] space-y-2">
+                {toasts.map(toast => (
+                    <div key={toast.id} className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-lg animate-fade-in-out
+                        ${toast.type === 'success' && 'bg-green-600'}
+                        ${toast.type === 'error' && 'bg-red-600'}
+                        ${toast.type === 'info' && 'bg-cyan-600'}
+                    `}>
+                        {toast.message}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

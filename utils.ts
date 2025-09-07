@@ -1,28 +1,11 @@
-// Helper to convert dataURL to File object
-export const dataURLtoFile = (dataurl: string, filename: string): File => {
-    const arr = dataurl.split(',');
-    // Check if the data URL format is valid
-    if (arr.length < 2) {
-        throw new Error('Invalid data URL format');
-    }
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch) {
-        throw new Error('Could not parse MIME type from data URL');
-    }
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while(n--){
-        u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, {type:mime});
-}
-
-// Helper to download an image from a data URL
-export const downloadImage = (dataUrl: string, filename: string) => {
+/**
+ * Downloads an image from a data URL or blob URL.
+ * @param url The URL of the image to download.
+ * @param filename The desired filename for the downloaded image.
+ */
+export const downloadImage = (url: string, filename: string): void => {
     const link = document.createElement('a');
-    link.href = dataUrl;
+    link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
@@ -30,76 +13,56 @@ export const downloadImage = (dataUrl: string, filename: string) => {
 };
 
 /**
- * Crops an image from its center to a target aspect ratio.
- * @param base64Src The base64 source of the image.
- * @param targetAspectRatio The desired aspect ratio string (e.g., '16:9').
- * @returns A promise that resolves to the new, cropped base64 data URL.
+ * Converts a data URL string to a File object.
+ * @param dataUrl The data URL to convert.
+ * @param filename The desired filename for the new File object.
+ * @returns A File object.
  */
-export const cropImageToAspectRatio = (base64Src: string, targetAspectRatio: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            const [targetW, targetH] = targetAspectRatio.split(':').map(Number);
-            const targetRatio = targetW / targetH;
-            
-            const srcW = img.width;
-            const srcH = img.height;
-            const srcRatio = srcW / srcH;
-
-            let cropW = srcW;
-            let cropH = srcH;
-
-            if (srcRatio > targetRatio) {
-                // Source is wider than target, crop width
-                cropW = srcH * targetRatio;
-            } else if (srcRatio < targetRatio) {
-                // Source is taller than target, crop height
-                cropH = srcW / targetRatio;
-            }
-
-            const cropX = (srcW - cropW) / 2;
-            const cropY = (srcH - cropH) / 2;
-
-            const canvas = document.createElement('canvas');
-            canvas.width = cropW;
-            canvas.height = cropH;
-            const ctx = canvas.getContext('2d');
-
-            if (!ctx) {
-                return reject(new Error('Could not get canvas context'));
-            }
-
-            ctx.drawImage(
-                img,
-                cropX,
-                cropY,
-                cropW,
-                cropH,
-                0,
-                0,
-                cropW,
-                cropH
-            );
-
-            resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = (err) => reject(err);
-        img.src = base64Src;
-    });
+export const dataURLtoFile = (dataUrl: string, filename: string): File => {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+        throw new Error("Invalid data URL: MIME type not found.");
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
 };
 
 /**
- * Detects the user's operating system.
- * @returns 'mac', 'windows', or 'mobile'.
+ * Converts a File to a base64 encoded string (without the data URL prefix).
+ * @param file The file to convert.
+ * @returns A promise that resolves with the base64 string.
  */
-export const getOS = (): 'mac' | 'windows' | 'mobile' => {
-  const { userAgent, platform } = navigator;
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+        if (typeof reader.result === 'string') {
+            resolve(reader.result.split(',')[1]);
+        } else {
+            reject(new Error('Failed to read file as base64 string.'));
+        }
+    };
+    reader.onerror = error => reject(error);
+  });
+};
 
-  if (/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent)) {
-    return 'mobile';
-  }
-  if (/Mac/i.test(platform)) {
-    return 'mac';
-  }
-  return 'windows';
+/**
+ * Gets the MIME type from a data URL.
+ * @param dataUrl The data URL.
+ * @returns The MIME type string.
+ */
+export const getMimeTypeFromDataUrl = (dataUrl: string): string => {
+    const mimeMatch = dataUrl.match(/data:(.*?);/);
+    if (!mimeMatch) {
+        throw new Error("Invalid data URL: MIME type not found.");
+    }
+    return mimeMatch[1];
 };

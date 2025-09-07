@@ -61,9 +61,11 @@ const NavButton: React.FC<{
     label: string;
     isActive: boolean;
     onClick: () => void;
-}> = ({ icon: Icon, label, isActive, onClick }) => (
+    title?: string;
+}> = ({ icon: Icon, label, isActive, onClick, title }) => (
     <button
         onClick={onClick}
+        title={title}
         className={`flex-1 flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-colors ${
             isActive ? 'bg-fuchsia-600 text-white' : 'text-slate-300 hover:bg-fuchsia-900/50 hover:text-white'
         }`}
@@ -261,7 +263,7 @@ const VersionInfo: React.FC = () => (
             <div className="w-16 h-16 mb-4 text-fuchsia-500">
                  <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="grad-logo-info" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#d946ef"/><stop offset="100%" stopColor="#22d3ee"/></linearGradient></defs><path d="M158.28,68.889c-3.1-13.2-11-24.6-21.8-32.3c-10.8-7.8-23.8-11.7-37.4-11.6c-13.5,0-26.4,3.9-37.1,11.6 c-10.7,7.7-18.6,19.1-21.7,32.3c-3.1,13.2-0.8,27,6.8,38.6c7.5,11.6,18.9,20.2,32,24.1l-1.3,16.3h-8.7c-2.3,0-4.1,1.8-4.1,4.1 s1.8,4.1,4.1,4.1h39.2c2.3,0,4.1-1.8,4.1-4.1s-1.8-4.1-4.1-4.1h-8.7l-1.3-16.3c13.1-3.9,24.5-12.5,32-24.1 C159.08,95.889,161.38,82.089,158.28,68.889z M130.88,99.489c-6.1,9.4-15.4,15.8-26,18.5l-2.6-32.5c0.5-0.1,1-0.2,1.5-0.4 c2.8-0.8,5.4-2.2,7.7-4.1c2.3-1.9,4.2-4.2,5.6-6.9c1.4-2.7,2.2-5.6,2.2-8.6c0-6.5-3.3-12.3-8.5-15.6c-5.2-3.3-11.6-4-17.1-1.9 c-5.5,2.1-9.5,6.6-11.2,12.2c-1.7,5.6-0.8,11.7,2.4,16.5c3.2,4.8,8.2,7.9,13.8,8.6l-2,25.2c-10.9-2.6-20.4-9.1-26.6-18.7 c-6.2-9.6-8.7-21.3-6.4-32.5c2.3-11.2,8.8-20.5,17.7-26.7c8.9-6.2,19.8-9.4,31.2-9.4s22.3,3.2,31.2,9.4 c8.9,6.2,15.4,15.5,17.7,26.7C139.58,78.189,137.08,89.889,130.88,99.489z" fill="url(#grad-logo-info)"/></svg>
             </div>
-            <h3 className="text-2xl font-semibold text-cyan-400">鳥巢AI包娜娜 v0.2.5</h3>
+            <h3 className="text-2xl font-semibold text-cyan-400">鳥巢AI包娜娜 v0.2.6</h3>
             <p className="text-xl mt-2 mb-4">主要功能介紹：</p>
             <ul className="text-xm text-left space-y-2 list-disc list-inside bg-black/20 p-4 rounded-lg">
                 <li>賽博龐克風格介面與快捷鍵支援</li>
@@ -272,7 +274,7 @@ const VersionInfo: React.FC = () => (
                 <li>沉浸式 Lightbox 瀏覽（縮放與平移）</li>
                 <li>一鍵提升畫質與 Zoom Out 擴圖</li>
             </ul>
-             <div className="mt-6 text-xl text-slate-400 border-t border-fuchsia-500/20 pt-4 w-full">
+             <div className="mt-6 text-2xl text-slate-400 border-t border-fuchsia-500/20 pt-4 w-full">
                 <p className="font-bold text-cyan-400 mb-2">2025歡迎邀約鳥巢AI</p>
                 <p>想學最新AI生成影音工具嗎？</p>
                 <p>企業想找AI工具顧問減少摸索時間？</p>
@@ -316,11 +318,11 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     className="w-full h-28 p-2 bg-gray-800/50 rounded-lg text-sm placeholder-slate-500 focus:ring-2 focus:ring-fuchsia-500 focus:outline-none resize-y"
                 />
                 <div className="flex gap-2 mt-2">
-                    <button onClick={props.onOptimizePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `${modifierKey}+O` : undefined}>
-                        <WandIcon className="w-4 h-4" /> {props.isOptimizing ? '優化中...' : `自動優化${!isMobile ? ` (${modifierKey}+O)` : ''}`.trim()}
+                    <button onClick={props.onOptimizePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `自動優化 (${modifierKey}+O)` : '自動優化'}>
+                        <WandIcon className="w-4 h-4" /> {props.isOptimizing ? '優化中...' : '自動優化'}
                     </button>
-                    <button onClick={props.onInspirePrompt} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700" title={!isMobile ? `${modifierKey}+I` : undefined}>
-                        <LightbulbIcon className="w-4 h-4" /> 靈感提示{!isMobile && ` (${modifierKey}+I)`}
+                    <button onClick={props.onInspirePrompt} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700" title={!isMobile ? `靈感提示 (${modifierKey}+I)` : '靈感提示'}>
+                        <LightbulbIcon className="w-4 h-4" /> 靈感提示
                     </button>
                     <button onClick={props.onClearSettings} className="p-2 text-xs bg-purple-900/50 rounded-md hover:bg-red-500/20 hover:text-red-400" title={`清除設定${!isMobile ? ` (${modifierKey}+Backspace)` : ''}`.trim()}>
                         <BroomIcon className="w-4 h-4" />
@@ -414,8 +416,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                 </div>
             </Section>
             
-            <button onClick={props.onGenerate} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                 {props.isLoading ? '生成中...' : `生成圖片${!isMobile ? ` (${modifierKey}+Enter)` : ''}`.trim()}
+            <button onClick={props.onGenerate} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2" title={!isMobile ? `生成圖片 (${modifierKey}+Enter)` : '生成圖片'}>
+                 {props.isLoading ? '生成中...' : '生成圖片'}
             </button>
         </>
     );
@@ -430,11 +432,11 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     className="w-full h-24 p-2 bg-gray-800/50 rounded-lg text-sm placeholder-slate-500 focus:ring-2 focus:ring-fuchsia-500 focus:outline-none resize-y"
                 />
                  <div className="flex gap-2 mt-2">
-                    <button onClick={props.onOptimizePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `${modifierKey}+O` : undefined}>
-                        <WandIcon className="w-4 h-4" /> {props.isOptimizing ? '優化中...' : `自動優化${!isMobile ? ` (${modifierKey}+O)` : ''}`.trim()}
+                    <button onClick={props.onOptimizePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `自動優化 (${modifierKey}+O)` : '自動優化'}>
+                        <WandIcon className="w-4 h-4" /> {props.isOptimizing ? '優化中...' : '自動優化'}
                     </button>
-                    <button onClick={props.onInspirePrompt} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700" title={!isMobile ? `${modifierKey}+I` : undefined}>
-                        <LightbulbIcon className="w-4 h-4" /> 靈感提示{!isMobile && ` (${modifierKey}+I)`}
+                    <button onClick={props.onInspirePrompt} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700" title={!isMobile ? `靈感提示 (${modifierKey}+I)` : '靈感提示'}>
+                        <LightbulbIcon className="w-4 h-4" /> 靈感提示
                     </button>
                     <button onClick={props.onClearSettings} className="p-2 text-xs bg-purple-900/50 rounded-md hover:bg-red-500/20 hover:text-red-400" title={`清除設定${!isMobile ? ` (${modifierKey}+Backspace)` : ''}`.trim()}>
                         <BroomIcon className="w-4 h-4" />
@@ -459,8 +461,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                  </Section>
             ))}
 
-             <button onClick={props.onGenerate} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                 {props.isLoading ? '生成中...' : `生成角色${!isMobile ? ` (${modifierKey}+Enter)` : ''}`.trim()}
+             <button onClick={props.onGenerate} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center gap-2" title={!isMobile ? `生成角色 (${modifierKey}+Enter)` : '生成角色'}>
+                 {props.isLoading ? '生成中...' : '生成角色'}
             </button>
         </>
     );
@@ -500,8 +502,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
             </Section>
             {props.uploadedImage && (
                 <>
-                    <button onClick={props.onRemoveBackground} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed">
-                        {props.isLoading ? '處理中...' : `移除背景${!isMobile ? ` (${modifierKey}+Enter)` : ''}`.trim()}
+                    <button onClick={props.onRemoveBackground} disabled={props.isLoading} className="w-full py-3 mt-auto bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700 disabled:bg-slate-700 disabled:cursor-not-allowed" title={!isMobile ? `移除背景 (${modifierKey}+Enter)` : '移除背景'}>
+                        {props.isLoading ? '處理中...' : '移除背景'}
                     </button>
                 </>
             )}
@@ -584,14 +586,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     </ImageUploader>
                  </Section>
                 <div className="grid grid-cols-2 gap-2 mt-auto">
-                    <button onClick={props.onUndoCanvas} className="flex items-center justify-center gap-2 py-2 bg-slate-800 rounded-md hover:bg-slate-700" title={!isMobile ? `${modifierKey}+Z` : '復原'}>
-                        <UndoIcon className="w-4 h-4"/>復原{!isMobile && ` (${modifierKey}+Z)`}
+                    <button onClick={props.onUndoCanvas} className="flex items-center justify-center gap-2 py-2 bg-slate-800 rounded-md hover:bg-slate-700" title={!isMobile ? `復原 (${modifierKey}+Z)` : '復原'}>
+                        <UndoIcon className="w-4 h-4"/>復原
                     </button>
-                    <button onClick={props.onClearCanvas} className="flex items-center justify-center gap-2 py-2 bg-slate-800 rounded-md hover:bg-slate-700" title={!isMobile ? `${modifierKey}+Backspace` : '清除'}>
+                    <button onClick={props.onClearCanvas} className="flex items-center justify-center gap-2 py-2 bg-slate-800 rounded-md hover:bg-slate-700" title={!isMobile ? `清除 (${modifierKey}+Backspace)` : '清除'}>
                         <TrashIcon className="w-4 h-4"/>清除
                     </button>
-                    <button onClick={props.onUseDrawing} className="col-span-2 py-3 bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700">
-                        使用此畫布生成{!isMobile && ` (${modifierKey}+Enter)`}
+                    <button onClick={props.onUseDrawing} className="col-span-2 py-3 bg-fuchsia-600 rounded-lg font-semibold hover:bg-fuchsia-700" title={!isMobile ? `使用此畫布生成 (${modifierKey}+Enter)` : '使用此畫布生成'}>
+                        使用此畫布生成
                     </button>
                 </div>
             </>
@@ -617,14 +619,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
             </button>
             <div className="p-4 border-b border-fuchsia-500/20">
               <div className="flex justify-between items-center mb-4">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-transparent bg-clip-text">鳥巢AI包娜娜 v0.2.5 Cyberpunk</h1>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-transparent bg-clip-text">鳥巢AI包娜娜 v0.2.6 Cyberpunk</h1>
               </div>
               <nav className="flex gap-1 bg-black/50 p-1 rounded-lg">
-                  <NavButton icon={MagicIcon} label={`AI生成${!isMobile ? ' (Alt+1)' : ''}`.trim()} isActive={appMode === 'GENERATE'} onClick={() => setAppMode('GENERATE')} />
-                  <NavButton icon={UserCircleIcon} label={`角色創造${!isMobile ? ' (Alt+2)' : ''}`.trim()} isActive={appMode === 'CHARACTER_CREATOR'} onClick={() => setAppMode('CHARACTER_CREATOR')} />
-                  <NavButton icon={EraseIcon} label={`背景移除${!isMobile ? ' (Alt+3)' : ''}`.trim()} isActive={appMode === 'REMOVE_BG'} onClick={() => setAppMode('REMOVE_BG')} />
-                  <NavButton icon={PaintBrushIcon} label={`塗鴉板${!isMobile ? ' (Alt+4)' : ''}`.trim()} isActive={appMode === 'DRAW'} onClick={() => setAppMode('DRAW')} />
-                  <NavButton icon={HistoryIcon} label={`歷史紀錄${!isMobile ? ' (Alt+5)' : ''}`.trim()} isActive={appMode === 'HISTORY'} onClick={() => setAppMode('HISTORY')} />
+                  <NavButton icon={MagicIcon} label="AI生成" title={!isMobile ? `AI生成 (${modifierKey}+Alt+1)` : 'AI生成'} isActive={appMode === 'GENERATE'} onClick={() => setAppMode('GENERATE')} />
+                  <NavButton icon={UserCircleIcon} label="角色創造" title={!isMobile ? `角色創造 (${modifierKey}+Alt+2)` : '角色創造'} isActive={appMode === 'CHARACTER_CREATOR'} onClick={() => setAppMode('CHARACTER_CREATOR')} />
+                  <NavButton icon={EraseIcon} label="背景移除" title={!isMobile ? `背景移除 (${modifierKey}+Alt+3)` : '背景移除'} isActive={appMode === 'REMOVE_BG'} onClick={() => setAppMode('REMOVE_BG')} />
+                  <NavButton icon={PaintBrushIcon} label="塗鴉板" title={!isMobile ? `塗鴉板 (${modifierKey}+Alt+4)` : '塗鴉板'} isActive={appMode === 'DRAW'} onClick={() => setAppMode('DRAW')} />
+                  <NavButton icon={HistoryIcon} label="歷史紀錄" title={!isMobile ? `歷史紀錄 (${modifierKey}+Alt+5)` : '歷史紀錄'} isActive={appMode === 'HISTORY'} onClick={() => setAppMode('HISTORY')} />
               </nav>
             </div>
             <div className="flex-1 flex flex-col overflow-y-auto p-4">
