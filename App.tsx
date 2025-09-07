@@ -6,7 +6,7 @@ import { Lightbox } from './components/Lightbox';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import type { AppMode, AspectRatio, UploadedImage, GeneratedImage, HistoryItem, Toast, LightboxConfig, DrawTool, DrawingCanvasRef } from './types';
 import * as gemini from './services/geminiService';
-import { dataURLtoFile, fileToBase64, getMimeTypeFromDataUrl } from './utils';
+import { dataURLtoFile, fileToBase64, getMimeTypeFromDataUrl, createPlaceholderImage } from './utils';
 import { SUBJECTS, BACKGROUNDS, ACTIONS_POSES, EMOTIONS, CLOTHING, DETAILS_OBJECTS, ART_STYLES, LIGHTING, COMPOSITIONS, TONES_TEXTURES } from './constants';
 
 const HISTORY_STORAGE_KEY = 'bn-cyberpunk-history-v1';
@@ -259,7 +259,7 @@ const App: React.FC = () => {
             `構圖為${randomItem(COMPOSITIONS)}`,
             `${randomItem(TONES_TEXTURES)}`,
         ].join(', ');
-        setPrompt(newPrompt);
+        setPrompt(prev => prev.trim() ? `${prev.trim()}, ${newPrompt}` : newPrompt);
     }, []);
 
     const handleRemoveReferenceImage = (index: number) => {
@@ -341,6 +341,27 @@ const App: React.FC = () => {
         setAppMode(targetMode);
         addToast(`圖片已載入至 ${targetMode === 'REMOVE_BG' ? '背景移除' : '塗鴉板'}`, 'success');
     };
+
+    const handleAspectRatioChangeForGeneratePanel = useCallback(async (ratio: AspectRatio) => {
+        setSelectedAspectRatio(ratio);
+        setDrawAspectRatio(ratio);
+    
+        const placeholderSrc = createPlaceholderImage(ratio, '#808080');
+        const placeholderFile = dataURLtoFile(placeholderSrc, `placeholder_${ratio.replace(':', 'x')}.png`);
+        const placeholderImage: UploadedImage = { src: placeholderSrc, file: placeholderFile };
+        
+        setReferenceImages(prev => [placeholderImage, ...prev].slice(0, 8));
+    
+        const outpaintingPrompt = `, 將生成內容重新繪製到灰色參考圖上，如有空白加入符合內容的outpaint以適合灰色參考圖的寬高比，完全佔滿取代灰色參考圖的所有內容(包含底色背景)，僅保留灰色參考圖的寬高比`;
+        setPrompt(prev => {
+            const trimmedPrev = prev.trim();
+            const basePrompt = trimmedPrev.split(', 將生成內容重新繪製到灰色參考圖上')[0];
+            return basePrompt ? `${basePrompt}${outpaintingPrompt}` : outpaintingPrompt.substring(2);
+        });
+        
+        addToast(`已建立 ${ratio} 灰色參考圖`, 'success');
+    
+    }, [addToast]);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -473,7 +494,7 @@ const App: React.FC = () => {
                 numImages={numImages}
                 setNumImages={setNumImages}
                 selectedAspectRatio={selectedAspectRatio}
-                onAspectRatioSelect={setSelectedAspectRatio}
+                onAspectRatioSelect={handleAspectRatioChangeForGeneratePanel}
                 isOptimizing={isOptimizing}
                 onOptimizePrompt={handleOptimizePrompt}
                 onInspirePrompt={handleInspirePrompt}

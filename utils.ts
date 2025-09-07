@@ -66,3 +66,28 @@ export const getMimeTypeFromDataUrl = (dataUrl: string): string => {
     }
     return mimeMatch[1];
 };
+
+/**
+ * Creates a placeholder image with a solid color and specific aspect ratio.
+ * @param aspectRatio The desired aspect ratio (e.g., '1:1', '16:9').
+ * @param color The background color of the placeholder.
+ * @returns A data URL string of the generated image.
+ */
+export const createPlaceholderImage = (aspectRatio: '1:1' | '3:4' | '4:3' | '9:16' | '16:9', color: string): string => {
+    const [w, h] = aspectRatio.split(':').map(Number);
+    // Use a small base size for efficiency
+    const canvasWidth = w * 100;
+    const canvasHeight = h * 100;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
+    
+    return canvas.toDataURL('image/png');
+};
