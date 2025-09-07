@@ -91,3 +91,59 @@ export const createPlaceholderImage = (aspectRatio: '1:1' | '3:4' | '4:3' | '9:1
     
     return canvas.toDataURL('image/png');
 };
+
+/**
+ * Gets the dimensions of an image from its data URL.
+ * @param dataUrl The data URL of the image.
+ * @returns A promise that resolves with the width and height of the image.
+ */
+export const getImageDimensions = (dataUrl: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            resolve({ width: img.width, height: img.height });
+        };
+        img.onerror = (err) => {
+            reject(err);
+        };
+        img.src = dataUrl;
+    });
+};
+
+/**
+ * Calculates the file size in bytes from a base64 string.
+ * @param dataUrl The full data URL string.
+ * @returns The size of the decoded data in bytes.
+ */
+export const getFileSizeFromBase64 = (dataUrl: string): number => {
+    const base64 = dataUrl.split(',')[1];
+    if (!base64) return 0;
+    const padding = (base64.match(/={1,2}$/) || []).length;
+    return (base64.length * 3 / 4) - padding;
+};
+
+/**
+ * Formats a size in bytes to a human-readable string (B, KB, MB).
+ * @param bytes The size in bytes.
+ * @returns A formatted string.
+ */
+export const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(2)} MB`;
+};
+
+/**
+ * Calculates the aspect ratio from width and height.
+ * @param width The width.
+ * @param height The height.
+ * @returns A string representing the simplified aspect ratio (e.g., "16:9").
+ */
+export const getAspectRatio = (width: number, height: number): string => {
+    if (height === 0) return `${width}:0`;
+    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+    const divisor = gcd(width, height);
+    return `${width / divisor}:${height / divisor}`;
+};

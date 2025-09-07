@@ -1,6 +1,6 @@
 import React from 'react';
 import type { HistoryItem, AppMode, Toast } from '../types';
-import { downloadImage } from '../utils';
+import { downloadImage, formatFileSize, getAspectRatio } from '../utils';
 import { TrashIcon, ImportIcon, DownloadIcon, ExpandIcon, ZoomOutIcon, EraseIcon, PaintBrushIcon } from './Icon';
 
 interface AnalysisPanelProps {
@@ -74,6 +74,15 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           <div>
             <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-1">提示詞</h3>
             <CopyableText text={image.alt} label="提示詞" addToast={addToast} />
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider mb-2">圖片資訊</h3>
+            <div className="text-xs text-slate-400 space-y-1 bg-black/20 p-2 rounded-md">
+                <p>尺寸: {image.width && image.height ? `${image.width} x ${image.height} px` : 'N/A'}</p>
+                <p>長寬比: {image.width && image.height ? getAspectRatio(image.width, image.height) : 'N/A'}</p>
+                <p>檔案大小: {image.size ? formatFileSize(image.size) : 'N/A'}</p>
+            </div>
           </div>
 
           <div className="space-y-2">

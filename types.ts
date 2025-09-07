@@ -13,6 +13,9 @@ export interface GeneratedImage {
   id: string;
   src: string;
   alt: string;
+  width?: number;
+  height?: number;
+  size?: number; // size in bytes
 }
 
 export interface HistoryItem extends GeneratedImage {

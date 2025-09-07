@@ -6,7 +6,7 @@ import { Lightbox } from './components/Lightbox';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import type { AppMode, AspectRatio, UploadedImage, GeneratedImage, HistoryItem, Toast, LightboxConfig, DrawTool, DrawingCanvasRef } from './types';
 import * as gemini from './services/geminiService';
-import { dataURLtoFile, fileToBase64, getMimeTypeFromDataUrl, createPlaceholderImage } from './utils';
+import { dataURLtoFile, fileToBase64, getMimeTypeFromDataUrl, createPlaceholderImage, getImageDimensions, getFileSizeFromBase64 } from './utils';
 import { SUBJECTS, BACKGROUNDS, ACTIONS_POSES, EMOTIONS, CLOTHING, DETAILS_OBJECTS, ART_STYLES, LIGHTING, COMPOSITIONS, TONES_TEXTURES } from './constants';
 
 const HISTORY_STORAGE_KEY = 'bn-cyberpunk-history-v1';
@@ -124,6 +124,19 @@ const App: React.FC = () => {
     }, []);
 
     // --- Core Action Handlers ---
+    const processImageSrc = async (src: string, alt: string): Promise<GeneratedImage> => {
+        const { width, height } = await getImageDimensions(src);
+        const size = getFileSizeFromBase64(src);
+        return {
+            id: crypto.randomUUID(),
+            src,
+            alt,
+            width,
+            height,
+            size,
+        };
+    };
+
 
     const handleGenerate = useCallback(async () => {
         setError(null);
@@ -157,11 +170,12 @@ const App: React.FC = () => {
             
             const imageDatas = await gemini.generateImagesWithGemini(prompt, numImages, selectedAspectRatio, combinedReferenceParts);
 
-            const newImages: GeneratedImage[] = imageDatas.map((base64) => ({
-                id: crypto.randomUUID(),
-                src: `data:image/png;base64,${base64}`,
-                alt: prompt,
-            }));
+            const newImagesPromises = imageDatas.map((base64) => {
+                const src = `data:image/png;base64,${base64}`;
+                return processImageSrc(src, prompt);
+            });
+            const newImages: GeneratedImage[] = await Promise.all(newImagesPromises);
+
 
             setGeneratedImages(newImages);
             setAppMode('GENERATE'); // Switch back to generate mode if needed
@@ -200,11 +214,10 @@ const App: React.FC = () => {
                 throw new Error(result.text || "模型未返回圖片。");
             }
 
-            const newImage: GeneratedImage = {
-                id: crypto.randomUUID(),
-                src: `data:image/png;base64,${result.image}`,
-                alt: `Background removed from ${uploadedImage.file.name}`,
-            };
+            const src = `data:image/png;base64,${result.image}`;
+            const alt = `Background removed from ${uploadedImage.file.name}`;
+            const newImage = await processImageSrc(src, alt);
+            
             setGeneratedImages([newImage]);
             setAppMode('GENERATE');
 
@@ -277,11 +290,9 @@ const App: React.FC = () => {
             const mimeType = getMimeTypeFromDataUrl(src);
             const upscaledBase64 = await gemini.upscaleImageWithGemini(base64, mimeType);
             
-            const newImage: GeneratedImage = {
-                id: crypto.randomUUID(),
-                src: `data:image/png;base64,${upscaledBase64}`,
-                alt: `Upscaled image`,
-            };
+            const newSrc = `data:image/png;base64,${upscaledBase64}`;
+            const newImage = await processImageSrc(newSrc, 'Upscaled image');
+
             setGeneratedImages([newImage]);
             setAppMode('GENERATE');
             

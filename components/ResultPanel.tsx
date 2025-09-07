@@ -1,7 +1,7 @@
 import React from 'react';
 import type { GeneratedImage, AppMode } from '../types';
 import { EyeIcon, DownloadIcon, ExpandIcon, ZoomOutIcon } from './Icon';
-import { downloadImage } from '../utils';
+import { downloadImage, formatFileSize } from '../utils';
 import { EXAMPLE_PROMPTS } from '../constants';
 
 interface ResultPanelProps {
@@ -65,6 +65,11 @@ const ImageCard: React.FC<{
                     </button>
                 </div>
             </div>
+            {image.width && image.height && image.size && (
+                <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none">
+                    {image.width}x{image.height} | {formatFileSize(image.size)}
+                </div>
+            )}
         </div>
     );
 };

@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import type { AppMode, UploadedImage, DrawTool, AspectRatio } from '../types';
 import {
     MagicIcon, EraseIcon, PaintBrushIcon, HistoryIcon, PlusIcon, TrashIcon, WandIcon, LightbulbIcon,
-    BroomIcon, UndoIcon, RectangleIcon, CircleIcon, ArrowUpRightIcon, CameraIcon, ImportIcon, XIcon,
+    XCircleIcon, UndoIcon, RectangleIcon, CircleIcon, ArrowUpRightIcon, CameraIcon, ImportIcon, XIcon,
     ClipboardIcon, UserCircleIcon
 } from './Icon';
 import { ASPECT_RATIOS, API_SUPPORTED_ASPECT_RATIOS, FUNCTION_BUTTONS, ART_STYLES_LIST, EDITING_EXAMPLES, CHARACTER_CREATOR_SECTIONS } from '../constants';
@@ -325,7 +325,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         <LightbulbIcon className="w-4 h-4" /> 靈感提示
                     </button>
                     <button onClick={props.onClearSettings} className="p-2 text-xs bg-purple-900/50 rounded-md hover:bg-red-500/20 hover:text-red-400" title={`清除設定${!isMobile ? ` (${modifierKey}+Backspace)` : ''}`.trim()}>
-                        <BroomIcon className="w-4 h-4" />
+                        <XCircleIcon className="w-4 h-4" />
                     </button>
                 </div>
             </Section>
@@ -439,7 +439,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                         <LightbulbIcon className="w-4 h-4" /> 靈感提示
                     </button>
                     <button onClick={props.onClearSettings} className="p-2 text-xs bg-purple-900/50 rounded-md hover:bg-red-500/20 hover:text-red-400" title={`清除設定${!isMobile ? ` (${modifierKey}+Backspace)` : ''}`.trim()}>
-                        <BroomIcon className="w-4 h-4" />
+                        <XCircleIcon className="w-4 h-4" />
                     </button>
                  </div>
             </Section>
