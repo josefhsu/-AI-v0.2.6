@@ -7,12 +7,14 @@ export type AspectRatio = typeof ASPECT_RATIOS[number];
 export type UploadedImage = {
     src: string;
     file: File;
+    isPlaceholder?: boolean;
 };
 
 export type GeneratedImage = {
     id: string;
     src: string;
-    alt: string; // The prompt used
+    alt: string; 
+    prompt?: string; // The prompt used to generate this specific image
     width?: number;
     height?: number;
     size?: number; // in bytes

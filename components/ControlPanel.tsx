@@ -1,3 +1,4 @@
+
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import type { AppMode, UploadedImage, DrawTool, AspectRatio } from '../types';
 import {
@@ -5,10 +6,10 @@ import {
     XCircleIcon, UndoIcon, RectangleIcon, CircleIcon, ArrowUpRightIcon, CameraIcon, ImportIcon, XIcon,
     ClipboardIcon, UserCircleIcon
 } from './Icon';
-import { ASPECT_RATIOS, API_SUPPORTED_ASPECT_RATIOS, FUNCTION_BUTTONS, ART_STYLES_LIST, EDITING_EXAMPLES, CHARACTER_CREATOR_SECTIONS } from '../constants';
-import { dataURLtoFile } from '../utils';
+import { ASPECT_RATIOS, FUNCTION_BUTTONS, ART_STYLES_LIST, EDITING_EXAMPLES, CHARACTER_CREATOR_SECTIONS } from '../constants';
 import { enhanceWebcamImage } from '../services/geminiService';
 import { ColorPicker } from './ColorPicker';
+import { dataURLtoFile } from '../utils';
 
 
 type ControlPanelProps = {
@@ -24,8 +25,6 @@ type ControlPanelProps = {
     onRemoveReferenceImage: (index: number) => void;
     prompt: string;
     setPrompt: React.Dispatch<React.SetStateAction<string>>;
-    numImages: number;
-    setNumImages: (num: number) => void;
     selectedAspectRatio: AspectRatio;
     onAspectRatioSelect: (aspectRatio: AspectRatio) => void;
     isOptimizing: boolean;
@@ -145,8 +144,8 @@ const WebcamCapture: React.FC<{
             if (imageData) {
                 setIsEnhancing(true);
                 try {
-                    const base64Data = imageData.split(',')[1];
-                    const enhancedBase64 = await enhanceWebcamImage(base64Data, 'image/png');
+                    const base64 = imageData.split(',')[1];
+                    const enhancedBase64 = await enhanceWebcamImage(base64, 'image/png');
                     const finalSrc = `data:image/png;base64,${enhancedBase64}`;
                     const file = dataURLtoFile(finalSrc, `webcam-enhanced-${Date.now()}.png`);
                     onImageSelect({ src: finalSrc, file });
@@ -154,7 +153,7 @@ const WebcamCapture: React.FC<{
                 } catch (err) {
                     console.error("Failed to enhance image:", err);
                     alert(`影像優化失敗: ${err instanceof Error ? err.message : String(err)}`);
-                    setIsEnhancing(false); // Stop enhancing on error
+                    setIsEnhancing(false);
                 }
             }
         }
@@ -286,33 +285,6 @@ const VersionInfo: React.FC<{ modifierKey: 'Ctrl' | '⌘' }> = ({ modifierKey })
                 <li>沉浸式 Lightbox 瀏覽（縮放與平移）</li>
                 <li>一鍵提升畫質與 Zoom Out 擴圖</li>
             </ul>
-
-            <div className="mt-6 text-left w-full text-sm">
-                <h4 className="text-lg font-semibold text-cyan-400 mb-3">快捷鍵清單</h4>
-                <div className="text-slate-400 space-y-4">
-                    <div>
-                        <p className="font-bold text-fuchsia-400">全域操作</p>
-                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Enter</code>: 執行主要操作</li>
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + I</code>: 獲取靈感提示</li>
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + O</code>: 自動優化提示詞</li>
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Backspace</code>: 清除設定</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <p className="font-bold text-fuchsia-400">模式切換</p>
-                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">{modifierKey} + Alt + 1-5</code>: 切換至對應面板</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <p className="font-bold text-fuchsia-400">塗鴉板專用</p>
-                        <ul className="list-disc list-inside pl-2 mt-1 space-y-1">
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">[</code>: 減少筆刷/線條寬度</li>
-                            <li><code className="bg-fuchsia-900/50 text-fuchsia-300 font-mono px-1.5 py-0.5 rounded-sm">]</code>: 增加筆刷/線條寬度</li>
-                        </ul>
-                    </div>
-                </div>
             <div className="mt-6 text-xl text-slate-400 border-t border-fuchsia-500/20 pt-4 w-full">
                 <p className="font-bold text-cyan-400 mb-2">2025歡迎邀約鳥巢AI</p>
                 <p>想學最新AI生成影音工具嗎？</p>
@@ -327,7 +299,7 @@ const VersionInfo: React.FC<{ modifierKey: 'Ctrl' | '⌘' }> = ({ modifierKey })
                     #SunoV45+ #AI歌以載道 <br />
                     鳥巢AI歌曲 <br /><a href="https://aiarttw.us/aisong" target="_blank" rel="noopener noreferrer" className="text-fuchsia-400 hover:underline">https://aiarttw.us/aisong</a>
                 </p>
-            </div></div>
+            </div>
         </div>
     </div>
 );
@@ -361,8 +333,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
                     <button onClick={props.onOptimizePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `自動優化 (${modifierKey}+O)` : '自動優化'}>
                         <WandIcon className="w-4 h-4" /> {props.isOptimizing ? '優化中...' : '自動優化'}
                     </button>
-                    <button onClick={props.onInspirePrompt} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700" title={!isMobile ? `靈感提示 (${modifierKey}+I)` : '靈感提示'}>
-                        <LightbulbIcon className="w-4 h-4" /> 靈感提示
+                    <button onClick={props.onInspirePrompt} disabled={props.isOptimizing} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs bg-purple-900/50 rounded-md hover:bg-fuchsia-700 disabled:opacity-50" title={!isMobile ? `靈感提示 (${modifierKey}+I)` : '靈感提示'}>
+                        <LightbulbIcon className="w-4 h-4" /> {props.isOptimizing ? '提示中...' : '靈感提示'}
                     </button>
                     <button onClick={props.onClearSettings} className="p-2 text-xs bg-purple-900/50 rounded-md hover:bg-red-500/20 hover:text-red-400" title={`清除設定${!isMobile ? ` (${modifierKey}+Backspace)` : ''}`.trim()}>
                         <XCircleIcon className="w-4 h-4" />
@@ -431,24 +403,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = (props) => {
 
             <Section title="圖片設定">
                 <div className="space-y-3">
-                    <div>
-                        <label className="text-xs text-slate-400 block mb-1">圖片數量</label>
-                        <div className="flex items-center gap-2">
-                             <input type="range" min="1" max="4" value={props.numImages} onChange={(e) => props.setNumImages(Number(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
-                             <span className="text-sm font-semibold w-8 text-center">{props.numImages}</span>
-                        </div>
-                    </div>
                      <div>
-                        <label className="text-xs text-slate-400 block mb-1">長寬比例(有上傳參考圖就無效)</label>
+                        <label className="text-xs text-slate-400 block mb-1">長寬比例</label>
                         <div className="grid grid-cols-5 gap-2 text-xs">
                            {ASPECT_RATIOS.map(ratio => (
                                <button 
                                 key={ratio} 
                                 onClick={() => props.onAspectRatioSelect(ratio)} 
-                                className={`py-1 rounded transition-colors ${props.selectedAspectRatio === ratio ? 'bg-fuchsia-600 text-white' : 'bg-slate-800 hover:bg-slate-700'} ${!API_SUPPORTED_ASPECT_RATIOS.includes(ratio) ? 'relative' : ''}`}
+                                className={`py-1 rounded transition-colors ${props.selectedAspectRatio === ratio ? 'bg-fuchsia-600 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
                                 >
                                 {ratio}
-                                {!API_SUPPORTED_ASPECT_RATIOS.includes(ratio) && <span className="absolute top-0 right-0 text-[8px] bg-amber-500 text-black px-0.5 rounded-full transform translate-x-1/2 -translate-y-1/2">裁</span>}
                                 </button>
                            ))}
                         </div>

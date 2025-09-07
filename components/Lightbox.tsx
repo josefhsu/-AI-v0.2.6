@@ -1,26 +1,27 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { GeneratedImage, LightboxConfig } from '../types';
-import { XIcon, ArrowLeftIcon, ArrowRightIcon, DownloadIcon, ExpandIcon, ZoomOutIcon } from './Icon';
+import { XIcon, ArrowLeftIcon, ArrowRightIcon, DownloadIcon, ExpandIcon, ZoomOutIcon, ImportIcon, EraseIcon, PaintBrushIcon } from './Icon';
 import { downloadImage } from '../utils';
 
 interface LightboxProps {
   config: LightboxConfig;
   onClose: () => void;
   onUpscale: (src: string) => void;
-  onZoomOut: (src: string) => void;
+  onZoomOut: (item: GeneratedImage) => void;
+  onUseImage: (image: GeneratedImage, action: 'reference' | 'remove_bg' | 'draw_bg') => void;
 }
 
-export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, onZoomOut }) => {
+export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, onZoomOut, onUseImage }) => {
+    if (!config) return null;
+
     const { images, startIndex } = config;
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     
-    // Zoom & Pan State
     const [zoom, setZoom] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-    // Refs
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const navigatorRef = useRef<HTMLDivElement>(null);
@@ -48,24 +49,19 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
     
     const handleDownload = useCallback(() => {
         if (currentImage) {
-            const safeFilename = currentImage.alt.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_').toLowerCase();
+            const safeFilename = (currentImage.prompt || currentImage.alt).replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_').toLowerCase();
             downloadImage(currentImage.src, `${safeFilename.slice(0, 30)}.png`);
         }
     }, [currentImage]);
-
-    // --- Robust Clamp & Pan/Zoom Logic ---
 
     const clampPosition = useCallback((pos: { x: number; y: number }, currentZoom: number) => {
         if (!containerRef.current || !imageRef.current) return { x: 0, y: 0 };
         const containerRect = containerRef.current.getBoundingClientRect();
         const { offsetWidth: imgLayoutWidth, offsetHeight: imgLayoutHeight } = imageRef.current;
-
         const imgDisplayWidth = imgLayoutWidth * currentZoom;
         const imgDisplayHeight = imgLayoutHeight * currentZoom;
-
         const overhangX = Math.max(0, (imgDisplayWidth - containerRect.width) / 2);
         const overhangY = Math.max(0, (imgDisplayHeight - containerRect.height) / 2);
-
         return {
             x: Math.max(-overhangX, Math.min(overhangX, pos.x)),
             y: Math.max(-overhangY, Math.min(overhangY, pos.y)),
@@ -76,7 +72,6 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
         e.preventDefault();
         const newZoom = Math.max(1, Math.min(4, zoom - e.deltaY * 0.01));
         const newPosition = clampPosition(position, newZoom);
-        
         setZoom(newZoom);
         setPosition(newPosition);
     };
@@ -97,39 +92,30 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
 
     const handleMouseUp = () => setIsDragging(false);
 
-    // --- Navigator Logic ---
     const handleNavAction = (e: React.MouseEvent | MouseEvent) => {
         if (!containerRef.current || !imageRef.current || !navigatorRef.current) return;
-        
         const containerRect = containerRef.current.getBoundingClientRect();
         const { offsetWidth: imgLayoutWidth, offsetHeight: imgLayoutHeight } = imageRef.current;
         const navRect = navigatorRef.current.getBoundingClientRect();
-
         const newNavX = e.clientX - navRect.left;
         const newNavY = e.clientY - navRect.top;
-        
         const xRatio = newNavX / navRect.width;
         const yRatio = newNavY / navRect.height;
-
         const overhangX = Math.max(0, (imgLayoutWidth * zoom - containerRect.width) / 2);
         const overhangY = Math.max(0, (imgLayoutHeight * zoom - containerRect.height) / 2);
-
         const newPosX = (0.5 - xRatio) * 2 * overhangX;
         const newPosY = (0.5 - yRatio) * 2 * overhangY;
-
         setPosition(clampPosition({ x: newPosX, y: newPosY }, zoom));
     }
 
     const handleNavMouseDown = (e: React.MouseEvent) => {
         e.stopPropagation();
-        handleNavAction(e); // Handle initial click for positioning
-
+        handleNavAction(e);
         const moveHandler = (moveEvent: MouseEvent) => handleNavAction(moveEvent);
         const upHandler = () => {
             window.removeEventListener('mousemove', moveHandler);
             window.removeEventListener('mouseup', upHandler);
         };
-        
         window.addEventListener('mousemove', moveHandler);
         window.addEventListener('mouseup', upHandler);
     };
@@ -154,7 +140,7 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
             onMouseLeave={handleMouseUp}
         >
             <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center text-white z-20 bg-gradient-to-b from-black/50 to-transparent">
-                 <p className="text-sm text-slate-300 truncate pr-4">{currentImage.alt}</p>
+                 <p className="text-sm text-slate-300 truncate pr-4">{currentImage.prompt || currentImage.alt}</p>
                  <div className="flex items-center gap-2 shrink-0">
                      <span className="font-semibold">{`${currentIndex + 1} / ${images.length}`}</span>
                     <button onClick={handleClose} className="p-2 rounded-full hover:bg-white/20">
@@ -185,11 +171,14 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
             </div>
             
             <div className="relative w-full max-w-4xl p-4 text-center text-slate-300 text-sm z-20 bg-gradient-to-t from-black/50 to-transparent">
-                <div className="flex justify-center items-center gap-4">
-                     <button onClick={handleDownload} title="下載圖片" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <DownloadIcon className="w-5 h-5" /> </button>
-                     <button onClick={() => onUpscale(currentImage.src)} title="提升畫質" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <ExpandIcon className="w-5 h-5" /> </button>
-                     <button onClick={() => onZoomOut(currentImage.src)} title="Zoom out 2x" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <ZoomOutIcon className="w-5 h-5" /> </button>
-                     <span className="text-xs font-mono bg-black/30 px-2 py-1 rounded">{(zoom * 100).toFixed(0)}%</span>
+                <div className="flex justify-center items-center flex-wrap gap-3">
+                    <button onClick={() => onUseImage(currentImage, 'reference')} title="作為參考圖" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <ImportIcon className="w-5 h-5" /> </button>
+                    <button onClick={() => onUseImage(currentImage, 'remove_bg')} title="移除背景" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <EraseIcon className="w-5 h-5" /> </button>
+                    <button onClick={() => onUseImage(currentImage, 'draw_bg')} title="設為畫布背景" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <PaintBrushIcon className="w-5 h-5" /> </button>
+                    <button onClick={handleDownload} title="下載圖片" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <DownloadIcon className="w-5 h-5" /> </button>
+                    <button onClick={() => onUpscale(currentImage.src)} title="提升畫質" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <ExpandIcon className="w-5 h-5" /> </button>
+                    <button onClick={() => onZoomOut(currentImage)} title="Zoom out 2x" className="p-2 text-white bg-slate-800/80 rounded-full hover:bg-fuchsia-600 transition-colors"> <ZoomOutIcon className="w-5 h-5" /> </button>
+                    <span className="text-xs font-mono bg-black/30 px-2 py-1 rounded">{(zoom * 100).toFixed(0)}%</span>
                 </div>
             </div>
             
@@ -197,25 +186,18 @@ export const Lightbox: React.FC<LightboxProps> = ({ config, onClose, onUpscale, 
                 (() => {
                     const containerRect = containerRef.current.getBoundingClientRect();
                     const { offsetWidth: imgLayoutWidth, offsetHeight: imgLayoutHeight } = imageRef.current;
-                    
                     const imgDisplayWidth = imgLayoutWidth * zoom;
                     const imgDisplayHeight = imgLayoutHeight * zoom;
-
                     const navWidth = 150;
                     const navHeight = navWidth * (imgLayoutHeight / imgLayoutWidth);
-                    
                     const boxWidth = (containerRect.width / imgDisplayWidth) * navWidth;
                     const boxHeight = (containerRect.height / imgDisplayHeight) * navHeight;
-
                     const overhangX = (imgDisplayWidth - containerRect.width) / 2;
                     const overhangY = (imgDisplayHeight - containerRect.height) / 2;
-                    
                     const viewOffsetX = overhangX - position.x;
                     const viewOffsetY = overhangY - position.y;
-
                     const boxLeft = (viewOffsetX / imgDisplayWidth) * navWidth;
                     const boxTop = (viewOffsetY / imgDisplayHeight) * navHeight;
-
                     return (
                         <div
                             ref={navigatorRef}

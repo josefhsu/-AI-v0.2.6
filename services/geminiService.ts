@@ -1,275 +1,262 @@
 
-import { GoogleGenAI, Part, Modality, Type } from '@google/genai';
-import type { AspectRatio } from '../types';
+import { GoogleGenAI, Part, Modality, Type } from "@google/genai";
+import { fileToBase64 } from '../utils';
+import { SUBJECTS, BACKGROUNDS, ACTIONS_POSES, EMOTIONS, CLOTHING, DETAILS_OBJECTS, ART_STYLES, LIGHTING, COMPOSITIONS, TONES_TEXTURES, API_SUPPORTED_ASPECT_RATIOS } from '../constants';
+import type { AspectRatio } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Initialize the Google Gemini AI client
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 /**
- * Converts a File object to a Part object.
+ * Converts a File object to a Gemini GenerativePart object.
  * @param file The file to convert.
- * @returns A promise that resolves to a Part object.
+ * @returns A promise that resolves to a GenerativePart object.
  */
-export const fileToGenerativePart = async (file: File): Promise<Part> => {
-    const base64EncodedDataPromise = new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-                // The result includes the data URL prefix (e.g., "data:image/png;base64,"),
-                // which needs to be removed.
-                resolve(reader.result.split(',')[1]);
-            } else {
-                reject(new Error("Failed to read file as data URL."));
-            }
-        };
-        reader.onerror = (error) => reject(error);
-        reader.readAsDataURL(file);
-    });
-
+export async function fileToGenerativePart(file: File): Promise<Part> {
+    const base64EncodedData = await fileToBase64(file);
     return {
         inlineData: {
-            data: await base64EncodedDataPromise,
+            data: base64EncodedData,
             mimeType: file.type,
         },
     };
-};
-
+}
 
 /**
- * Generates images using Gemini. Handles both text-to-image and image-to-image.
- * @param prompt Text prompt.
- * @param numImages Number of images to generate (for text-to-image).
- * @param aspectRatio Desired aspect ratio (for text-to-image).
- * @param referenceImageParts Array of reference image parts for image-to-image.
- * @returns A promise that resolves to an array of base64 image strings.
+ * Generates images using the Gemini API.
+ * @param prompt The text prompt for image generation.
+ * @param imageParts An array of reference image parts.
+ * @param selectedAspectRatio The desired aspect ratio for the generated images.
+ * @returns A promise that resolves to an array of base64 encoded image strings.
  */
 export const generateImagesWithGemini = async (
     prompt: string,
-    numImages: number,
-    aspectRatio: AspectRatio,
-    referenceImageParts: Part[]
+    imageParts: Part[],
+    selectedAspectRatio: AspectRatio
 ): Promise<string[]> => {
-    try {
-        if (referenceImageParts && referenceImageParts.length > 0) {
-            // This is an image editing/inspiration task using gemini-2.5-flash-image-preview
-            const contents = {
-                parts: [...referenceImageParts, { text: prompt }]
-            };
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image-preview',
-                contents,
-                config: {
-                    responseModalities: [Modality.IMAGE, Modality.TEXT],
-                },
-            });
-            
-            const imageParts = response.candidates?.[0]?.content?.parts.filter(part => part.inlineData) ?? [];
-            if (imageParts.length === 0) {
-                const textResponse = response.text?.trim();
-                if (textResponse) {
-                    throw new Error(`Model returned a text response instead of an image: "${textResponse}"`);
-                }
-                throw new Error("Image editing failed: The model did not return an image.");
-            }
-            return imageParts.map(part => part.inlineData!.data);
+    
+    // The Imagen API has a limited set of supported aspect ratios.
+    // We find the closest supported ratio if the selected one isn't directly supported.
+    const aspectRatio = API_SUPPORTED_ASPECT_RATIOS.includes(selectedAspectRatio) ? selectedAspectRatio : "1:1";
 
-        } else {
-            // This is a pure text-to-image generation task using imagen-4.0-generate-001
-            const response = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt,
-                config: {
-                    numberOfImages: numImages,
-                    aspectRatio: aspectRatio ?? '1:1',
-                    outputMimeType: 'image/png',
-                },
-            });
+    const contents = imageParts.length > 0
+        ? { parts: [...imageParts, { text: prompt }] }
+        : prompt;
+
+    // Use generateContent for multimodal prompts (text + image)
+    if (imageParts.length > 0) {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image-preview', // Use the image editing model for multimodal input
+            contents: contents,
+            config: {
+                responseModalities: [Modality.IMAGE, Modality.TEXT],
+            }
+        });
+
+        const imagePartsFromResponse = response.candidates?.[0]?.content?.parts.filter(part => part.inlineData);
+        if (imagePartsFromResponse && imagePartsFromResponse.length > 0) {
+            return imagePartsFromResponse.map(part => part.inlineData!.data);
+        }
+        throw new Error("Image generation with reference failed to produce an image.");
+
+    } else {
+        // Use generateImages for text-only prompts
+        const response = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: prompt,
+            config: {
+                numberOfImages: 4, // Let's generate 4 images at a time
+                outputMimeType: 'image/png',
+                aspectRatio: aspectRatio as "1:1" | "3:4" | "4:3" | "9:16" | "16:9",
+            },
+        });
+    
+        if (response.generatedImages && response.generatedImages.length > 0) {
             return response.generatedImages.map(img => img.image.imageBytes);
         }
-    } catch (error) {
-        console.error("Error in generateImagesWithGemini:", error);
-        if (error instanceof Error) {
-            throw new Error(`Image generation failed: ${error.message}`);
-        }
-        throw new Error("An unknown error occurred during image generation.");
     }
+    
+    throw new Error("Image generation failed to produce any images.");
 };
 
+
 /**
- * Removes the background from an image.
- * @param base64ImageData The base64 encoded image data.
+ * Removes the background from an image using Gemini.
+ * @param base64 The base64 encoded image data.
  * @param mimeType The MIME type of the image.
  * @param addGreenScreen Whether to add a green screen background.
- * @returns A promise that resolves to the processed image data.
+ * @returns A promise that resolves to an object containing the new image base64 and any text response.
  */
 export const removeBackground = async (
-    base64ImageData: string,
+    base64: string,
     mimeType: string,
     addGreenScreen: boolean
 ): Promise<{ image: string | null; text: string | null }> => {
-    const prompt = addGreenScreen
-        ? "Remove the background and replace it with a solid green screen (hex #00ff00). Keep the subject perfectly intact and centered."
-        : "Remove the background completely, leaving only the main subject with a transparent background. Do not add any new background.";
-
-    const imagePart: Part = {
-        inlineData: {
-            data: base64ImageData,
-            mimeType: mimeType,
-        },
-    };
-    
-    const contents = { parts: [imagePart, { text: prompt }] };
+    const promptText = addGreenScreen
+        ? "Remove the background of this image and replace it with a solid green screen (#00FF00). Keep the subject perfectly intact."
+        : "Remove the background of this image, making it transparent. Keep the subject perfectly intact.";
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',
-        contents,
+        contents: {
+            parts: [
+                { inlineData: { data: base64, mimeType } },
+                { text: promptText },
+            ],
+        },
         config: {
             responseModalities: [Modality.IMAGE, Modality.TEXT],
-        }
+        },
     });
 
-    const resultImagePart = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
-    const resultTextPart = response.candidates?.[0]?.content?.parts.find(part => part.text);
+    const candidate = response.candidates?.[0];
+    if (!candidate) {
+        throw new Error("Background removal failed: No response from model.");
+    }
+    
+    const imagePart = candidate.content.parts.find(p => p.inlineData);
+    const textPart = candidate.content.parts.find(p => p.text);
 
     return {
-        image: resultImagePart?.inlineData?.data ?? null,
-        text: resultTextPart?.text ?? null,
+        image: imagePart?.inlineData?.data || null,
+        text: textPart?.text || null,
     };
 };
 
 /**
- * Optimizes a user's prompt for better image generation results.
- * @param prompt The user's prompt.
- * @returns A promise that resolves to an optimized prompt string.
+ * Optimizes a user's prompt using Gemini.
+ * @param prompt The prompt to optimize.
+ * @returns A promise that resolves to the optimized prompt string.
  */
 export const optimizePromptWithGemini = async (prompt: string): Promise<string> => {
-    const systemInstruction = "You are an expert prompt engineer for generative AI image models. Your task is to take a user's simple prompt and expand it into a rich, detailed, and vivid prompt that will generate a high-quality, visually stunning image. Focus on adding details about subject, style, lighting, composition, and mood. The output should be only the optimized prompt, in a single line of comma-separated keywords and phrases, in Traditional Chinese. Do not add any conversational text or explanations.";
-    
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Optimize this prompt in Traditional Chinese: "${prompt}"`,
-        config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.8,
-            topP: 0.9,
-        },
+        contents: `You are an expert prompt engineer for text-to-image models.
+        Rewrite the following user prompt to be more descriptive, vivid, and effective for generating a high-quality, detailed image.
+        Focus on adding details about subject, style, lighting, and composition.
+        Return ONLY the rewritten prompt, without any explanation or preamble.
+        
+        User prompt: "${prompt}"
+        
+        Optimized prompt:`,
     });
 
-    return response.text.trim().replace(/^"|"$/g, ''); // Remove potential quotes
+    return response.text.trim();
 };
 
 /**
- * Upscales an image to a higher resolution.
- * @param base64ImageData The base64 encoded image data.
+ * Upscales an image using Gemini.
+ * @param base64 The base64 encoded image data.
  * @param mimeType The MIME type of the image.
- * @returns A promise that resolves to the upscaled base64 image string.
+ * @returns A promise that resolves to the base64 encoded upscaled image string.
  */
-export const upscaleImageWithGemini = async (base64ImageData: string, mimeType: string): Promise<string> => {
-    const prompt = "Upscale this image to a higher resolution, enhancing details and clarity without altering the content. The output should be a crisper, more detailed version of the original image.";
-    
-    const imagePart: Part = {
-        inlineData: {
-            data: base64ImageData,
-            mimeType: mimeType,
-        },
-    };
-
-    const contents = { parts: [imagePart, { text: prompt }] };
-
+export const upscaleImageWithGemini = async (base64: string, mimeType: string): Promise<string> => {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image-preview',
-        contents,
+        contents: {
+            parts: [
+                { inlineData: { data: base64, mimeType } },
+                { text: "Upscale this image to a higher resolution, enhancing details and clarity without changing the content. Make it sharper and more defined." },
+            ],
+        },
         config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
+            responseModalities: [Modality.IMAGE],
         },
     });
-    
-    const resultImagePart = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
 
-    if (!resultImagePart || !resultImagePart.inlineData?.data) {
-        const textResponse = response.text?.trim();
-        if (textResponse) {
-            throw new Error(`Upscaling failed: ${textResponse}`);
-        }
-        throw new Error("Upscaling failed: The model did not return an image.");
+    const imagePart = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+
+    if (imagePart?.inlineData?.data) {
+        return imagePart.inlineData.data;
     }
-    
-    return resultImagePart.inlineData.data;
+
+    throw new Error("Upscaling failed to produce an image.");
 };
 
 /**
- * Enhances a webcam image by adjusting brightness, contrast, and color.
- * @param base64ImageData The base64 encoded image data from the webcam.
- * @param mimeType The MIME type of the image.
- * @returns A promise that resolves to the enhanced base64 image string.
+ * Analyzes the aesthetics of an image using Gemini.
+ * @param imagePart The image part to analyze.
+ * @returns A promise that resolves to an object with a score and detailed analysis.
  */
-export const enhanceWebcamImage = async (base64ImageData: string, mimeType: string): Promise<string> => {
-    const prompt = "Enhance this webcam photo. Adjust brightness, contrast, and color balance for a more natural, well-lit, and clear image. Reduce noise if present. Do not crop or alter the composition.";
-    
-    const imagePart: Part = {
-        inlineData: {
-            data: base64ImageData,
-            mimeType: mimeType,
-        },
-    };
-
-    const contents = { parts: [imagePart, { text: prompt }] };
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
-        contents,
-        config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
-        },
-    });
-    
-    const resultImagePart = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
-
-    if (!resultImagePart || !resultImagePart.inlineData?.data) {
-        const textResponse = response.text?.trim();
-        if (textResponse) {
-            throw new Error(`Image enhancement failed: ${textResponse}`);
-        }
-        throw new Error("Image enhancement failed: The model did not return an image.");
-    }
-    
-    return resultImagePart.inlineData.data;
-};
-
-/**
- * Analyzes the aesthetics of an image and provides a score and critique.
- * @param imagePart The image to analyze as a Part.
- * @returns A promise that resolves to an object with a score and analysis.
- */
-export const analyzeImageAesthetics = async (imagePart: Part): Promise<{ score: string; analysis: string; }> => {
-    const prompt = "Act as an expert art critic. Analyze this image for its aesthetic qualities. Provide a score out of 10 (e.g., '8.5/10') and a concise analysis covering composition, color, lighting, subject, and overall style. Respond in Traditional Chinese.";
-
-    const contents = { parts: [imagePart, { text: prompt }] };
-
+export const analyzeImageAesthetics = async (imagePart: Part): Promise<{ score: string; analysis: string }> => {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents,
+        contents: {
+            parts: [
+                imagePart,
+                { text: "You are an art critic. Analyze this image for its aesthetic qualities. Provide a score out of 100 and a brief analysis covering composition, lighting, color, and subject matter. Return the response as a JSON object with two keys: 'score' (string, e.g., '85/100') and 'analysis' (string)." },
+            ]
+        },
         config: {
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    score: { type: Type.STRING, description: 'The aesthetic score out of 10, e.g., "8.5/10".' },
-                    analysis: { type: Type.STRING, description: 'A detailed critique of the image in Traditional Chinese.' },
+                    score: { type: Type.STRING, description: "A score out of 100, e.g. '85/100'" },
+                    analysis: { type: Type.STRING, description: "A brief analysis of the image's aesthetics." },
                 },
-                propertyOrdering: ["score", "analysis"],
-            },
+                required: ["score", "analysis"],
+            }
         },
     });
 
+    const jsonString = response.text.trim();
     try {
-        const jsonString = response.text.trim();
         const result = JSON.parse(jsonString);
-        return {
-            score: result.score || "N/A",
-            analysis: result.analysis || "No analysis provided."
-        };
+        if (result.score && result.analysis) {
+            return result;
+        }
+        throw new Error("Invalid JSON format from analysis API.");
     } catch (e) {
-        console.error("Failed to parse AI analysis response:", e);
-        throw new Error("The AI provided an invalid analysis format.");
+        console.error("Failed to parse analysis JSON:", jsonString, e);
+        throw new Error("Failed to analyze image aesthetics.");
     }
+};
+
+/**
+ * Gets an inspiration prompt snippet.
+ * @returns A promise that resolves to a string with an inspiration snippet.
+ */
+export const getInspiration = async (): Promise<string> => {
+    const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+    const inspiration = [
+        getRandom(SUBJECTS),
+        getRandom(BACKGROUNDS),
+        getRandom(ACTIONS_POSES),
+        getRandom(EMOTIONS),
+        getRandom(ART_STYLES),
+        getRandom(LIGHTING),
+    ].join(', ');
+    return inspiration;
+};
+
+
+/**
+ * Enhances a webcam image using Gemini.
+ * @param base64 The base64 encoded image data from the webcam.
+ * @param mimeType The MIME type of the image.
+ * @returns A promise that resolves to the base64 encoded enhanced image string.
+ */
+export const enhanceWebcamImage = async (base64: string, mimeType: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: {
+            parts: [
+                { inlineData: { data: base64, mimeType } },
+                { text: "This is a raw webcam photo. Please enhance it to look like a professionally shot portrait. Adjust lighting, color balance, and sharpness. Fix any minor blemishes. Do not change the person's features or the background." },
+            ],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
+    });
+
+    const imagePart = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+
+    if (imagePart?.inlineData?.data) {
+        return imagePart.inlineData.data;
+    }
+
+    throw new Error("Webcam image enhancement failed.");
 };
