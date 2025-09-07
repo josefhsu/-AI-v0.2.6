@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useEffect, useCallback, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useEffect, useCallback } from 'react';
 import type { DrawTool, AspectRatio, DrawingCanvasRef } from '../types';
 
 // Let TypeScript know that fabric is available on the global scope
@@ -51,11 +51,12 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         }
     }, []);
 
-    const resizeAndScaleCanvas = useCallback(() => {
+    const updateCanvasView = useCallback(() => {
         const canvas = fabricCanvasRef.current;
         const container = containerRef.current;
         if (!canvas || !container) return;
 
+        // --- Sizing logic ---
         const [aspectW, aspectH] = aspectRatio.split(':').map(Number);
         const containerW = container.clientWidth;
         const containerH = container.clientHeight;
@@ -71,37 +72,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         canvas.setWidth(newW);
         canvas.setHeight(newH);
         canvas.calcOffset();
-        canvas.renderAll();
 
-    }, [aspectRatio]);
-
-    useEffect(() => {
-        if (!canvasRef.current) return;
-        const canvas = new fabric.Canvas(canvasRef.current, {
-            selection: false,
-        });
-        fabricCanvasRef.current = canvas;
-        historyRef.current = [];
-        
-        resizeAndScaleCanvas();
-        saveState();
-
-        return () => {
-            canvas.dispose();
-            fabricCanvasRef.current = null;
-        };
-    }, []);
-    
-    useEffect(() => {
-        window.addEventListener('resize', resizeAndScaleCanvas);
-        return () => window.removeEventListener('resize', resizeAndScaleCanvas);
-    }, [resizeAndScaleCanvas]);
-
-    // Update canvas properties
-    useEffect(() => {
-        const canvas = fabricCanvasRef.current;
-        if (!canvas) return;
-
+        // --- Background and color logic ---
         canvas.backgroundColor = backgroundColor;
 
         if (backgroundImage) {
@@ -114,8 +86,42 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         } else {
             canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
         }
+
+        // Final render
         canvas.renderAll();
-    }, [backgroundColor, backgroundImage]);
+    }, [aspectRatio, backgroundColor, backgroundImage]);
+
+    useEffect(() => {
+        if (!canvasRef.current) return;
+        const canvas = new fabric.Canvas(canvasRef.current, {
+            selection: false,
+        });
+        fabricCanvasRef.current = canvas;
+        historyRef.current = [];
+        
+        updateCanvasView();
+        saveState();
+
+        return () => {
+            canvas.dispose();
+            fabricCanvasRef.current = null;
+        };
+    }, []); // Only on mount
+    
+    // --- Effects to trigger canvas updates ---
+    
+    // Update on prop changes
+    useEffect(() => {
+        if (fabricCanvasRef.current) {
+            updateCanvasView();
+        }
+    }, [updateCanvasView]);
+
+    // Update on window resize
+    useEffect(() => {
+        window.addEventListener('resize', updateCanvasView);
+        return () => window.removeEventListener('resize', updateCanvasView);
+    }, [updateCanvasView]);
     
     // Tool and brush settings
     useEffect(() => {
@@ -311,19 +317,9 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             const canvas = fabricCanvasRef.current;
             if (canvas) {
                 canvas.clear();
-                canvas.backgroundColor = backgroundColor;
-                if (backgroundImage) {
-                    fabric.Image.fromURL(backgroundImage, (img:any) => {
-                        canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-                            scaleX: canvas.width / img.width,
-                            scaleY: canvas.height / img.height,
-                        });
-                        saveState();
-                    });
-                } else {
-                    canvas.renderAll();
-                    saveState();
-                }
+                // Re-apply background after clearing
+                updateCanvasView();
+                saveState();
             }
         },
         undo: () => {
@@ -332,7 +328,8 @@ export const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
                 historyRef.current.pop(); // remove current state
                 const lastState = historyRef.current[historyRef.current.length - 1];
                 canvas.loadFromJSON(lastState, () => {
-                    canvas.renderAll();
+                    // Ensure view is updated correctly after loading state
+                    updateCanvasView();
                 });
             }
         }

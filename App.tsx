@@ -126,6 +126,17 @@ const App: React.FC = () => {
         }, 3000);
     }, []);
 
+    const handleBrushSizeChange = useCallback((size: number) => {
+        setBrushSize(size);
+        setIsPreviewingBrushSize(true);
+        if (brushPreviewTimerRef.current) {
+            clearTimeout(brushPreviewTimerRef.current);
+        }
+        brushPreviewTimerRef.current = window.setTimeout(() => {
+            setIsPreviewingBrushSize(false);
+        }, 2000);
+    }, []);
+    
     // --- Core Action Handlers ---
     const processImageSrc = async (src: string, alt: string): Promise<GeneratedImage> => {
         const { width, height } = await getImageDimensions(src);
@@ -339,21 +350,21 @@ const App: React.FC = () => {
         addToast("圖片已添加至參考圖", 'success');
     };
 
-    const handleDeleteHistoryItem = (id: string) => {
+    const handleDeleteHistoryItem = useCallback((id: string) => {
         setHistory(prev => prev.filter(item => item.id !== id));
         if (selectedHistoryItem?.id === id) {
             setSelectedHistoryItem(null);
         }
         addToast("紀錄已刪除", 'success');
-    };
+    }, [selectedHistoryItem]);
 
-    const handleClearHistory = () => {
+    const handleClearHistory = useCallback(() => {
         if (window.confirm("確定要清除所有歷史紀錄嗎？此操作無法復原。")) {
             setHistory([]);
             setSelectedHistoryItem(null);
             addToast("歷史紀錄已清除", 'success');
         }
-    };
+    }, []);
     
     const handleUseImage = (src: string, targetMode: AppMode) => {
         const file = dataURLtoFile(src, 'reused-image.png');
@@ -401,17 +412,6 @@ const App: React.FC = () => {
         }
     },[]);
 
-    const handleBrushSizeChange = useCallback((size: number) => {
-        setBrushSize(size);
-        setIsPreviewingBrushSize(true);
-        if (brushPreviewTimerRef.current) {
-            clearTimeout(brushPreviewTimerRef.current);
-        }
-        brushPreviewTimerRef.current = window.setTimeout(() => {
-            setIsPreviewingBrushSize(false);
-        }, 2000);
-    }, []);
-
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -439,12 +439,12 @@ const App: React.FC = () => {
             if (appMode === 'DRAW') {
                 if (e.key === '[') {
                     e.preventDefault();
-                    setBrushSize(prev => Math.max(1, prev - 1));
+                    handleBrushSizeChange(Math.max(1, brushSize - 1));
                     return;
                 }
                 if (e.key === ']') {
                     e.preventDefault();
-                    setBrushSize(prev => Math.min(100, prev + 1));
+                    handleBrushSizeChange(Math.min(100, brushSize + 1));
                     return;
                 }
             }
@@ -478,7 +478,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [appMode, handleGenerate, handleRemoveBackground, handleClearSettings, handleOptimizePrompt, handleInspirePrompt, handleUseDrawing]);
+    }, [appMode, handleGenerate, handleRemoveBackground, handleClearSettings, handleOptimizePrompt, handleInspirePrompt, handleUseDrawing, brushSize, handleBrushSizeChange]);
     
     // Paste from clipboard
     useEffect(() => {
